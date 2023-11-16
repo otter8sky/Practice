@@ -1,0 +1,60 @@
+Sun
+0 0 0
+0 0 0
+1.0
+Yellow
+
+Mercury
+0 -9.9 0
+-0.39 0 0
+1.5e-7
+Black
+
+Venus
+0 -7.33 0
+-0.72 0 0
+2.5E-6
+Orange
+
+Earth
+0 6.28 0
+1 0 0
+2.0E-6
+Green
+
+Moon
+0 6.35 0
+1.03 0 0
+3.0e-8
+Purple
+
+Mars
+0 5.04 0
+1.52 0 0
+3.2e-7
+Red
+
+Jupiter
+0 -2.74 0
+5.2 0 0
+9.5E-4
+Pink
+
+Saturn
+0 2.06 0
+9.5 0 0
+2.9e-4
+Green
+
+Uran
+0 1.42 0
+19.2 0 0
+4.3E-5
+Blue
+
+Neptun
+0 1.13 0
+30 0 0
+5.1E-5
+Cyan
+
