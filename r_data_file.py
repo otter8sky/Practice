@@ -1,4 +1,5 @@
 from operations import *
+from main import n
 
 file = open('DATA.txt', 'r')
 s = 0
@@ -7,7 +8,11 @@ Bodies = []
 colors = []
 mas = []
 
+cnt_body = 0
+
 for item in file:
+    if cnt_body > n:
+        break
     item = item.strip()
     if s < 5:
         if s == 1 or s == 2:
@@ -22,6 +27,7 @@ for item in file:
         Bodies.append(Body(mas[1], mas[2], mas[3], Acs))
         mas = []
         s = 0
+        cnt_body += 1
+
 file.close()
 
-n = len(Bodies)

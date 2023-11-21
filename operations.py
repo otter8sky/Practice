@@ -1,5 +1,12 @@
 from const import *
 
+class Body:
+    def __init__(self, vel, coord, mass, acs):
+        self.vel = vel
+        self.coord = coord
+        self.mass = mass
+        self.acs = acs
+
 def vect(v, u):
     p = [v[1]*u[2] - v[2]*u[1], -(v[0]*u[2] - v[2]*u[0]), v[0]*u[1] - v[1]*u[0]]
     return p
@@ -72,15 +79,48 @@ def get_Energy(bodies):
     energy = get_Kinetical_Energy(bodies) + get_Potential_Energy(bodies)
     return energy
 
-class Body:
-    def __init__(self, vel, coord, mass, acs):
-        self.vel = vel
-        self.coord = coord
-        self.mass = mass
-        self.acs = acs
-
 def copy(bodies):
     copied_bodies = []
     for i in range(len(bodies)):
         copied_bodies.append(Body(bodies[i].vel, bodies[i].coord, bodies[i].mass, bodies[i].acs))
     return copied_bodies
+
+def change_vel(vel):
+    k = year_s / a_e
+    changed_vel = []
+    for i in range(len(vel)):
+        changed_vel.append(vel[i] * k)
+    return changed_vel
+def change_mass(mass):
+    changed_mass = mass / M_sun
+    return changed_mass
+
+def get_time_step(bodies, time_step, delta_vel, delta_coord, delta_timestep, timestep_max, timestep_min):
+    dec_step = False
+    donot_inc = False
+    expected = copy(bodies)
+    for i in range(len(bodies)):
+        if i > 0:
+            expected[i].coord = add(bodies[i].coord, mult(bodies[i].vel, time_step))
+            expected[i].vel = add(bodies[i].vel, mult(bodies[i].acs, time_step))
+            vel_change_i = abs(get_mag(expected[i].vel) - get_mag(bodies[i].vel))
+            print("vel_change_i = ", vel_change_i)
+            coord_change_i = abs(get_mag(expected[i].coord) - get_mag(bodies[i].coord))
+            print("coord_change_i = ", coord_change_i)
+            print(get_mag(bodies[i].coord))
+            print(get_mag(expected[i].coord))
+            expected_delta_vel_i = 2 * vel_change_i / (get_mag(expected[i].vel) + get_mag(bodies[i].vel))
+            expected_delta_coord_i = 2 * coord_change_i / (get_mag(expected[i].coord) + get_mag(bodies[i].coord))
+
+            if expected_delta_vel_i > delta_vel or expected_delta_coord_i > delta_coord:
+                dec_step = True
+                break
+            elif expected_delta_vel_i < delta_vel and expected_delta_coord_i < delta_coord:
+                donot_inc = True
+
+    if dec_step and time_step - delta_timestep >= timestep_min:
+        return time_step - delta_timestep
+    elif donot_inc and not dec_step or time_step - delta_timestep < timestep_min:
+        return time_step
+    elif not dec_step and not donot_inc and time_step + delta_timestep < timestep_max:
+        return time_step + delta_timestep

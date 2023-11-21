@@ -4,7 +4,7 @@ import ast
 from main import *
 import numpy as np
 from matplotlib import animation
-from plots import *
+'''from plots import *'''
 
 f = open("2.txt", "r+")
 x2 = ast.literal_eval(f.readline())
@@ -61,6 +61,11 @@ z10 = ast.literal_eval(f.readline())
 f.close()
 '''
 
+f = open("energy.txt", "r+")
+energy = ast.literal_eval(f.readline())
+time_en = ast.literal_eval(f.readline())
+time = ast.literal_eval(f.readline())
+f.close()
 
 t = time
 
@@ -101,8 +106,8 @@ def animate_func(num):
    ax.set_xlim3d([-2, 2])
    ax.set_ylim3d([-2, 2])
    ax.set_zlim3d([-2, 2])
-
-   ax.set_title('Trajectory \nTime = ' + str(np.round(t[num], decimals=2)) + ' sec')
+   #FIXME сделать нормальный счётчик времени + почему проходит год, а крутится 3?
+   '''ax.set_title('Trajectory \nTime = ' + str(np.round(t[num], decimals=2)) + ' sec')'''
    ax.set_xlabel('x')
    ax.set_ylabel('y')
    ax.set_zlabel('z')

@@ -1,35 +1,29 @@
-from methods import *
-from r_data_file import *
-import numpy as np
+from comp import comp
+from comp import read_data_file
+from methods import By_Ex_Euler
+from methods import By_PC
+from methods import By_RK_4
+from methods import By_Verlet
+from const import *
 
-def comp(method, bodies, t, time_end, time_step):
-    bodies_x = [[] for i in range(n)]
-    bodies_y = [[] for i in range(n)]
-    bodies_z = [[] for i in range(n)]
-    energy = []
-    time = []
-    time_en = []
-    cnt = 0
-    while t <= time_end:
-        result = method(bodies, time_step)
-        energy.append(get_Energy(result))
-        if cnt == 100:
-            for i in range(n):
-                bodies_x[i].append(result[i].coord[0])
-                bodies_y[i].append(result[i].coord[1])
-                bodies_z[i].append(result[i].coord[2])
-            time.append(t)
-            cnt = 0
-        time_en.append(t)
-        cnt += 1
-        t += time_step
+Methods = [By_Ex_Euler,
+           By_PC,
+           By_RK_4,
+           By_Verlet]
+Names = ['Explicit Euler', 'Predictor-Corrector', 'RK-4', 'Verlet']
 
-    for i in range(n):
-        f = open(f"{i + 1}.txt", "w+")
-        f.writelines(
-            [str(bodies_x[i]), "\n", str(bodies_y[i]), "\n", str(bodies_z[i]), "\n", colors[i], "\n", names[i], "\n"])
-        f.close()
+# choose the method, number of bodies SS, end time and time step
+method = By_RK_4
+n = 6
+time_end = 1
+time_step = 0.0001
+# variable time step
+delta_vel = 0.01
+delta_coord = 0.01
+delta_timestep = 0.01
+timestep_max = 0.01
+timestep_min = 0.0000001
 
-    f = open("energy.txt", "w+")
-    f.writelines([str(energy), "\n", str(time_en), "\n", str(time), "\n"])
-    f.close()
+Bodies, names, colors = read_data_file('DATA_norm', n)
+
+energy = comp(method, Bodies, t, time_end, time_step, colors, names, delta_vel, delta_coord, delta_timestep, timestep_max, timestep_min)
