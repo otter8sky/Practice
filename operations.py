@@ -104,11 +104,7 @@ def get_time_step(bodies, time_step, delta_vel, delta_coord, delta_timestep, tim
             expected[i].coord = add(bodies[i].coord, mult(bodies[i].vel, time_step))
             expected[i].vel = add(bodies[i].vel, mult(bodies[i].acs, time_step))
             vel_change_i = abs(get_mag(expected[i].vel) - get_mag(bodies[i].vel))
-            print("vel_change_i = ", vel_change_i)
             coord_change_i = abs(get_mag(expected[i].coord) - get_mag(bodies[i].coord))
-            print("coord_change_i = ", coord_change_i)
-            print(get_mag(bodies[i].coord))
-            print(get_mag(expected[i].coord))
             expected_delta_vel_i = 2 * vel_change_i / (get_mag(expected[i].vel) + get_mag(bodies[i].vel))
             expected_delta_coord_i = 2 * coord_change_i / (get_mag(expected[i].coord) + get_mag(bodies[i].coord))
 

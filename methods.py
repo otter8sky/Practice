@@ -64,7 +64,8 @@ def By_Verlet(bodies, time_step):
     result = copy(bodies)
     for i in range(len(bodies)):
         result[i].coord = add(add(bodies[i].coord, mult(bodies[i].vel, time_step)), mult(bodies[i].acs, time_step**2 / 2))
-        result[i].vel = add(bodies[i].vel,   mult(add(bodies[i].acs, bodies[i].acs), time_step / 2))
+        predicted_acs_i = get_total_acs(result, i)
+        result[i].vel = add(bodies[i].vel, mult(add(bodies[i].acs, predicted_acs_i), time_step / 2))
     result = get_acs_for_all(result)
     for i in range(len(bodies)):
         bodies[i].coord = result[i].coord[:]
@@ -72,4 +73,14 @@ def By_Verlet(bodies, time_step):
         bodies[i].acs = result[i].acs[:]
     return result
 
-
+def By_Leap_Frog(bodies, time_step):
+    result = copy(bodies)
+    for i in range(len(bodies)):
+        result[i].coord = add(bodies[i].coord, mult(bodies[i].vel, time_step))  # посчитали новую координату
+        result = get_acs_for_all(result)
+        result[i].vel = add(bodies[i].vel, mult(result[i].acs, time_step))  # расчёт скорости (по яэ черех )
+    for i in range(len(bodies)):
+        bodies[i].coord = result[i].coord[:]
+        bodies[i].vel = result[i].vel[:]
+        bodies[i].acs = result[i].acs[:]
+    return result

@@ -36,5 +36,9 @@ plt.legend(loc='best')
 plt.xlabel('t, years')
 plt.ylabel('energy')
 plt.title(f"{Name} Energy", fontsize=20, color="purple")
+
+
 plt.plot(time_en, energy, label="energy")
+
+
 plt.show()
