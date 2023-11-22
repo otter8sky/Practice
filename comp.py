@@ -54,6 +54,10 @@ def comp(method, bodies, t, time_end, time_step, colors, names, delta_vel, delta
     bodies_x = [[] for i in range(len(bodies))]
     bodies_y = [[] for i in range(len(bodies))]
     bodies_z = [[] for i in range(len(bodies))]
+    coords_cm_x = []
+    coords_cm_y = []
+    coords_cm_z = []
+
     energy = []
     time = []
     time_en = []
@@ -71,6 +75,9 @@ def comp(method, bodies, t, time_end, time_step, colors, names, delta_vel, delta
                     bodies_x[i].append(result[i].coord[0])
                     bodies_y[i].append(result[i].coord[1])
                     bodies_z[i].append(result[i].coord[2])
+                    coords_cm_x.append(get_coord_cm(bodies)[0])
+                    coords_cm_y.append(get_coord_cm(bodies)[1])
+                    coords_cm_z.append(get_coord_cm(bodies)[2])
                 time.append(t)
                 cnt = 0
             elif t == 0:
@@ -78,6 +85,9 @@ def comp(method, bodies, t, time_end, time_step, colors, names, delta_vel, delta
                     bodies_x[i].append(bodies[i].coord[0])
                     bodies_y[i].append(bodies[i].coord[1])
                     bodies_z[i].append(bodies[i].coord[2])
+                    coords_cm_x.append(get_coord_cm(bodies)[0])
+                    coords_cm_y.append(get_coord_cm(bodies)[1])
+                    coords_cm_z.append(get_coord_cm(bodies)[2])
                 time.append(t)
         time_en.append(t)
         cnt += 1
@@ -94,5 +104,8 @@ def comp(method, bodies, t, time_end, time_step, colors, names, delta_vel, delta
         f.close()
     f = open("energy.txt", "w+")
     f.writelines([str(energy), "\n", str(time_en), "\n", str(time), "\n"])
+    f.close()
+    f = open("center_mass.txt", "w+")
+    f.writelines([str(coords_cm_x), "\n", str(coords_cm_y), "\n", str(coords_cm_z), "\n", str(time), "\n"])
     f.close()
 

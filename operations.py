@@ -120,3 +120,19 @@ def get_time_step(bodies, time_step, delta_vel, delta_coord, delta_timestep, tim
         return time_step
     elif not dec_step and not donot_inc and time_step + delta_timestep < timestep_max:
         return time_step + delta_timestep
+
+def get_coord_cm(bodies):
+    coord_cm = []
+    sum_xi_mi = 0
+    sum_yi_mi = 0
+    sum_zi_mi = 0
+    sum_mi = 0
+    for i in range(len(bodies)):
+        sum_xi_mi += bodies[i].coord[0] * bodies[i].mass
+        sum_yi_mi += bodies[i].coord[1] * bodies[i].mass
+        sum_zi_mi += bodies[i].coord[2] * bodies[i].mass
+        sum_mi += bodies[i].mass
+    coord_cm.append(sum_xi_mi / sum_mi)
+    coord_cm.append(sum_yi_mi / sum_mi)
+    coord_cm.append(sum_zi_mi / sum_mi)
+    return coord_cm
