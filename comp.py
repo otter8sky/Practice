@@ -8,29 +8,44 @@ def read_data_file(file_name, n):
     colors = []
     mas = []
     s = 0
-    cnt_body = 0
+    cnt = 0
+    cnt_body = 1
+    kms_au_kg = False
+    auyear_au_masssun = False
     for item in file:
-        if cnt_body > n:
-            break
         item = item.strip()
-        if s < 5:
-            if s == 1:
-                # item = list(map(float, item.split()))
-                item = change_vel(list(map(float, item.split())))[:]
-            elif s == 2:
-                item = list(map(float, item.split()))
-            elif s == 3:
-                # item = float(item)
-                item = change_mass(float(item))
-            mas.append(item)
-            s += 1
+        if cnt == 0:
+            if item == "au_year/au/mass_sun":
+                auyear_au_masssun = True
+            elif item == "kms/au/kg":
+                kms_au_kg = True
+        if cnt > 1:
+            if cnt_body > n:
+                break
+            if s < 5:
+                if s == 1:
+                    if kms_au_kg:
+                        item = change_vel(list(map(float, item.split())))[:]
+                    elif auyear_au_masssun:
+                        item = list(map(float, item.split()))
+                elif s == 2:
+                    item = list(map(float, item.split()))
+                elif s == 3:
+                    if kms_au_kg:
+                        item = change_mass(float(item))
+                    elif auyear_au_masssun:
+                        item = float(item)
+                mas.append(item)
+                s += 1
+            else:
+                names.append(mas[0])
+                colors.append(mas[4])
+                Bodies.append(Body(mas[1], mas[2], mas[3], Acs))
+                mas = []
+                s = 0
+                cnt_body += 1
         else:
-            names.append(mas[0])
-            colors.append(mas[4])
-            Bodies.append(Body(mas[1], mas[2], mas[3], Acs))
-            mas = []
-            s = 0
-            cnt_body += 1
+            cnt += 1
     file.close()
     Bodies = get_acs_for_all(Bodies)
     return Bodies, names, colors
