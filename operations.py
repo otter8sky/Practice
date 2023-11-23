@@ -120,7 +120,6 @@ def get_time_step(bodies, time_step, delta_vel, delta_coord, delta_timestep, tim
         return time_step
     elif not dec_step and not donot_inc and time_step + delta_timestep < timestep_max:
         return time_step + delta_timestep
-
 def get_coord_cm(bodies):
     coord_cm = []
     sum_xi_mi = 0
@@ -136,3 +135,8 @@ def get_coord_cm(bodies):
     coord_cm.append(sum_yi_mi / sum_mi)
     coord_cm.append(sum_zi_mi / sum_mi)
     return coord_cm
+def get_vect_total_momentum(bodies):
+    vect_total_momentum = [0, 0, 0]
+    for i in range(len(bodies)):
+        vect_total_momentum = add(vect_total_momentum, mult(bodies[i].vel, bodies[i].mass))[:]
+    return vect_total_momentum
