@@ -50,24 +50,33 @@ def read_data_file(file_name, n):
     Bodies = get_acs_for_all(Bodies)
     return Bodies, names, colors
 
-def comp(method, bodies, t, time_end, time_step, colors, names, delta_vel, delta_coord, delta_timestep, timestep_max, timestep_min):
+def comp(method, bodies, time_end, time_step, colors, names, delta_vel, delta_coord, delta_timestep, timestep_max,
+         timestep_min):
     bodies_x = [[] for i in range(len(bodies))]
     bodies_y = [[] for i in range(len(bodies))]
     bodies_z = [[] for i in range(len(bodies))]
+    bodies_vel = [[] for i in range(len(bodies))]
     coords_cm_x = []
     coords_cm_y = []
     coords_cm_z = []
-
+    vect_total_momentum_x = []
+    vect_total_momentum_y = []
+    vect_total_momentum_z = []
+    mag_vect_total_momentum = []
     energy = []
     time = []
     time_en = []
+    time_step_plot = []
     cnt = 0
+    t = 0
     while t <= time_end:
         if t == 0 and method == By_Leap_Frog:
             for i in range(len(bodies)):
                 bodies[i].vel = add(bodies[i].vel, mult(bodies[i].acs, time_step / 2))
         else:
-            time_step = get_time_step(bodies, time_step, delta_vel, delta_coord, delta_timestep, timestep_max, timestep_min)
+            time_step = get_time_step(bodies, time_step, delta_vel, delta_coord, delta_timestep, timestep_max,
+                                      timestep_min)
+            time_step_plot.append(time_step)
             result = method(bodies, time_step)
             energy.append(get_Energy(result))
             if cnt == 100 and t != 0:
@@ -75,9 +84,14 @@ def comp(method, bodies, t, time_end, time_step, colors, names, delta_vel, delta
                     bodies_x[i].append(result[i].coord[0])
                     bodies_y[i].append(result[i].coord[1])
                     bodies_z[i].append(result[i].coord[2])
+                    bodies_vel[i].append(result[i].vel)
                     coords_cm_x.append(get_coord_cm(bodies)[0])
                     coords_cm_y.append(get_coord_cm(bodies)[1])
                     coords_cm_z.append(get_coord_cm(bodies)[2])
+                    vect_total_momentum_x.append(get_vect_total_momentum(bodies)[0])
+                    vect_total_momentum_y.append(get_vect_total_momentum(bodies)[1])
+                    vect_total_momentum_z.append(get_vect_total_momentum(bodies)[2])
+                    mag_vect_total_momentum.append(get_mag(get_vect_total_momentum(bodies)))
                 time.append(t)
                 cnt = 0
             elif t == 0:
@@ -85,9 +99,14 @@ def comp(method, bodies, t, time_end, time_step, colors, names, delta_vel, delta
                     bodies_x[i].append(bodies[i].coord[0])
                     bodies_y[i].append(bodies[i].coord[1])
                     bodies_z[i].append(bodies[i].coord[2])
+                    bodies_vel[i].append(result[i].vel)
                     coords_cm_x.append(get_coord_cm(bodies)[0])
                     coords_cm_y.append(get_coord_cm(bodies)[1])
                     coords_cm_z.append(get_coord_cm(bodies)[2])
+                    vect_total_momentum_x.append(get_vect_total_momentum(bodies)[0])
+                    vect_total_momentum_y.append(get_vect_total_momentum(bodies)[1])
+                    vect_total_momentum_z.append(get_vect_total_momentum(bodies)[2])
+                    mag_vect_total_momentum.append(get_mag(get_vect_total_momentum(bodies)))
                 time.append(t)
         time_en.append(t)
         cnt += 1
@@ -100,12 +119,19 @@ def comp(method, bodies, t, time_end, time_step, colors, names, delta_vel, delta
     for i in range(len(bodies)):
         f = open(f"{i + 1}.txt", "w+")
         f.writelines(
-            [str(bodies_x[i]), "\n", str(bodies_y[i]), "\n", str(bodies_z[i]), "\n", colors[i], "\n", names[i], "\n"])
+            [str(bodies_x[i]), "\n", str(bodies_y[i]), "\n", str(bodies_z[i]), "\n", colors[i], "\n", names[i], "\n",
+             bodies_vel[i], "\n"])
         f.close()
+
     f = open("energy.txt", "w+")
     f.writelines([str(energy), "\n", str(time_en), "\n", str(time), "\n"])
     f.close()
+
     f = open("center_mass.txt", "w+")
     f.writelines([str(coords_cm_x), "\n", str(coords_cm_y), "\n", str(coords_cm_z), "\n", str(time), "\n"])
     f.close()
 
+    f = open("momentum.txt", "w+")
+    f.writelines([str(vect_total_momentum_x), "\n", str(vect_total_momentum_y), "\n", str(vect_total_momentum_z), "\n",
+                  str(mag_vect_total_momentum), "\n", str(time_en), "\n"])
+    f.close()
