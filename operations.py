@@ -1,11 +1,13 @@
 from const import *
+from pathlib import Path
 
 class Body:
-    def __init__(self, vel, coord, mass, acs):
+    def __init__(self, vel, coord, mass, acs, name):
         self.vel = vel
         self.coord = coord
         self.mass = mass
         self.acs = acs
+        self.name = name
 
 def vect(v, u):
     p = [v[1]*u[2] - v[2]*u[1], -(v[0]*u[2] - v[2]*u[0]), v[0]*u[1] - v[1]*u[0]]
@@ -82,7 +84,7 @@ def get_Energy(bodies):
 def copy(bodies):
     copied_bodies = []
     for i in range(len(bodies)):
-        copied_bodies.append(Body(bodies[i].vel, bodies[i].coord, bodies[i].mass, bodies[i].acs))
+        copied_bodies.append(Body(bodies[i].vel, bodies[i].coord, bodies[i].mass, bodies[i].acs, bodies[i].name))
     return copied_bodies
 
 def change_vel(vel):
@@ -120,6 +122,7 @@ def get_time_step(bodies, time_step, delta_vel, delta_coord, delta_timestep, tim
         return time_step
     elif not dec_step and not donot_inc and time_step + delta_timestep < timestep_max:
         return time_step + delta_timestep
+
 def get_coord_cm(bodies):
     coord_cm = []
     sum_xi_mi = 0
@@ -135,8 +138,38 @@ def get_coord_cm(bodies):
     coord_cm.append(sum_yi_mi / sum_mi)
     coord_cm.append(sum_zi_mi / sum_mi)
     return coord_cm
+
 def get_vect_total_momentum(bodies):
     vect_total_momentum = [0, 0, 0]
     for i in range(len(bodies)):
         vect_total_momentum = add(vect_total_momentum, mult(bodies[i].vel, bodies[i].mass))[:]
     return vect_total_momentum
+
+def clear_all_datafiles(bodies):
+    for i in range(len(bodies)):
+        f = open(Path(Path.cwd(), "data", "objects", f"{bodies[i].name}.txt"), "w")
+        f.truncate(0)
+        f.write("time, years \t X, a.u. \t Y, a.u. \t Z, a.u. \t Vx, a.u./year \t Vy, a.u./year \t Vz, a.u./year")
+        f.close()
+
+    f = open(Path(Path.cwd(), "data", "data out", "center_mass.txt"), "w")
+    f.truncate(0)
+    f.write("time, years \t cm_x, a.u. \t cm_y, a.u. \t cm_z, a.u.")
+    f.close()
+
+    f = open(Path(Path.cwd(), "data", "data out", "momentum.txt"), "w")
+    f.truncate(0)
+    f.write("time, years \t momentum_x, a.u. \t momentum_y, a.u. \t momentum_z, a.u. \t momentum_mag")
+    f.close()
+
+    f = open(Path(Path.cwd(), "data", "data out", "energy.txt"), "w")
+    f.truncate(0)
+    f.write("time, years \t energy")
+    f.close()
+
+    f = open(Path(Path.cwd(), "data", "data out", "time_step.txt"), "w")
+    f.truncate(0)
+    f.write("time, years \t time step, years")
+    f.close()
+
+
