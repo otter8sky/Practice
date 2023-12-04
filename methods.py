@@ -18,7 +18,7 @@ def By_PC(bodies, time_step):
     k2 = Euler_byDataOf(k1, k1, time_step)
     for i in range(len(bodies)):
         result[i].coord = add(k1[i].coord, mult(add(k1[i].vel, k2[i].vel), time_step / 2))
-        result[i].vel   = add(k1[i].vel,   mult(add(k1[i].acs, k2[i].acs), time_step / 2))
+        result[i].vel = add(k1[i].vel,   mult(add(k1[i].acs, k2[i].acs), time_step / 2))
     result = get_acs_for_all(result)
     for i in range(len(bodies)):
         bodies[i].coord = result[i].coord[:]
@@ -76,11 +76,20 @@ def By_Verlet(bodies, time_step):
 def By_Leap_Frog(bodies, time_step):
     result = copy(bodies)
     for i in range(len(bodies)):
-        result[i].coord = add(bodies[i].coord, mult(bodies[i].vel, time_step))  # посчитали новую координату
+        result[i].coord = add(bodies[i].coord, mult(bodies[i].vel, time_step))
         result = get_acs_for_all(result)
-        result[i].vel = add(bodies[i].vel, mult(result[i].acs, time_step))  # расчёт скорости (по яэ черех )
+        result[i].vel = add(bodies[i].vel, mult(result[i].acs, time_step))
     for i in range(len(bodies)):
         bodies[i].coord = result[i].coord[:]
         bodies[i].vel = result[i].vel[:]
         bodies[i].acs = result[i].acs[:]
     return result
+
+methods = [By_Ex_Euler, By_PC, By_RK_4, By_Verlet, By_Leap_Frog]
+def fill_methods_names_list(methods_list):
+    methods_names_list = []
+    for i in range(len(methods_list)):
+        methods_names_list.append(methods_list[i].__name__)
+    return methods_names_list
+methods_names = fill_methods_names_list(methods)
+
