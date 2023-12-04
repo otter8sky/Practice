@@ -2,17 +2,35 @@ from const import *
 from pathlib import Path
 
 class Body:
-    def __init__(self, vel, coord, mass, acs, name):
+    def __init__(self, vel, coord, mass, acs, name, color):
         self.vel = vel
         self.coord = coord
         self.mass = mass
         self.acs = acs
         self.name = name
+        self.color = color
+class Problem:
+    def __init__(self, method, time_end, initial_timestep, delta_vel,
+                 delta_coord, delta_timestep, timestep_max, timestep_min):
+        self.method = method
+        self.time_end = time_end
+        self.initial_timestep = initial_timestep
+        self.delta_vel = delta_vel
+        self.delta_timestep = delta_timestep
+        self.delta_coord = delta_coord
+        self.timestep_max = timestep_max
+        self.timestep_min = timestep_min
+class Method:
+    def __init__(self, name):
+        self.name = name
+
+    def add_to_list(self, methods):
+        methods.append(self.name)
 
 def vect(v, u):
     p = [v[1]*u[2] - v[2]*u[1], -(v[0]*u[2] - v[2]*u[0]), v[0]*u[1] - v[1]*u[0]]
     return p
-def skal(v, u):
+def scal(v, u):
     return v[0]*u[0] + v[1]*u[1] + v[2]*u[2]
 def mult(v, c):
     u = [v[0]*c, v[1]*c, v[2]*c]
@@ -84,7 +102,12 @@ def get_Energy(bodies):
 def copy(bodies):
     copied_bodies = []
     for i in range(len(bodies)):
-        copied_bodies.append(Body(bodies[i].vel, bodies[i].coord, bodies[i].mass, bodies[i].acs, bodies[i].name))
+        copied_bodies.append(Body(bodies[i].vel,
+                                  bodies[i].coord,
+                                  bodies[i].mass,
+                                  bodies[i].acs,
+                                  bodies[i].name,
+                                  bodies[i].color))
     return copied_bodies
 
 def change_vel(vel):
@@ -96,10 +119,15 @@ def change_vel(vel):
 def change_mass(mass):
     changed_mass = mass / M_sun
     return changed_mass
+def type_float(coordinates):
+    float_coordinates = []
+    for i in range(len(coordinates)):
+        float_coordinates.append(float(coordinates[i]))
+    return float_coordinates
 
-def get_time_step(bodies, time_step, delta_vel, delta_coord, delta_timestep, timestep_max, timestep_min):
+def get_time_step(bodies, time_step, problem):
     dec_step = False
-    donot_inc = False
+    inc_step = False
     expected = copy(bodies)
     for i in range(len(bodies)):
         if i > 0:
@@ -110,19 +138,17 @@ def get_time_step(bodies, time_step, delta_vel, delta_coord, delta_timestep, tim
             expected_delta_vel_i = 2 * vel_change_i / (get_mag(expected[i].vel) + get_mag(bodies[i].vel))
             expected_delta_coord_i = 2 * coord_change_i / (get_mag(expected[i].coord) + get_mag(bodies[i].coord))
 
-            if expected_delta_vel_i > delta_vel or expected_delta_coord_i > delta_coord:
+            if expected_delta_vel_i > problem.delta_vel or expected_delta_coord_i > problem.delta_coord:
                 dec_step = True
                 break
-            elif expected_delta_vel_i < delta_vel and expected_delta_coord_i < delta_coord:
-                donot_inc = True
-
-    if dec_step and time_step - delta_timestep >= timestep_min:
-        return time_step - delta_timestep
-    elif donot_inc and not dec_step or time_step - delta_timestep < timestep_min:
+            elif expected_delta_vel_i < problem.delta_vel and expected_delta_coord_i < problem.delta_coord:
+                inc_step = True
+    if dec_step and time_step - problem.delta_timestep > problem.timestep_min:
+        return time_step - problem.delta_timestep
+    elif inc_step and time_step + problem.delta_timestep < problem.timestep_max:
+        return time_step + problem.delta_timestep
+    else:
         return time_step
-    elif not dec_step and not donot_inc and time_step + delta_timestep < timestep_max:
-        return time_step + delta_timestep
-
 def get_coord_cm(bodies):
     coord_cm = []
     sum_xi_mi = 0
@@ -138,7 +164,6 @@ def get_coord_cm(bodies):
     coord_cm.append(sum_yi_mi / sum_mi)
     coord_cm.append(sum_zi_mi / sum_mi)
     return coord_cm
-
 def get_vect_total_momentum(bodies):
     vect_total_momentum = [0, 0, 0]
     for i in range(len(bodies)):
@@ -149,27 +174,30 @@ def clear_all_datafiles(bodies):
     for i in range(len(bodies)):
         f = open(Path(Path.cwd(), "data", "objects", f"{bodies[i].name}.txt"), "w")
         f.truncate(0)
-        f.write("time, years \t X, a.u. \t Y, a.u. \t Z, a.u. \t Vx, a.u./year \t Vy, a.u./year \t Vz, a.u./year")
+        f.write("time, years\tX, a.u.\tY, a.u.\tZ, a.u.\tVx, a.u./year\tVy, a.u./year\tVz, a.u./year")
         f.close()
 
     f = open(Path(Path.cwd(), "data", "data out", "center_mass.txt"), "w")
     f.truncate(0)
-    f.write("time, years \t cm_x, a.u. \t cm_y, a.u. \t cm_z, a.u.")
+    f.write("time, years\tcm_x, a.u.\tcm_y, a.u.\tcm_z, a.u.")
     f.close()
 
     f = open(Path(Path.cwd(), "data", "data out", "momentum.txt"), "w")
     f.truncate(0)
-    f.write("time, years \t momentum_x, a.u. \t momentum_y, a.u. \t momentum_z, a.u. \t momentum_mag")
+    f.write("time, years\tmomentum_x, a.u.\tmomentum_y, a.u.\tmomentum_z, a.u.\tmomentum_mag")
     f.close()
 
     f = open(Path(Path.cwd(), "data", "data out", "energy.txt"), "w")
     f.truncate(0)
-    f.write("time, years \t energy")
+    f.write("time, years\tenergy")
     f.close()
 
     f = open(Path(Path.cwd(), "data", "data out", "time_step.txt"), "w")
     f.truncate(0)
-    f.write("time, years \t time step, years")
+    f.write("time, years\ttime step, years")
     f.close()
 
-
+def get_method(method_name, methods, methods_names):
+    for i in range(len(methods_names)):
+        if method_name == methods_names[i]:
+            return methods[i]
