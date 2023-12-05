@@ -201,3 +201,11 @@ def get_method(method_name, methods, methods_names):
     for i in range(len(methods_names)):
         if method_name == methods_names[i]:
             return methods[i]
+
+def print_ex_time(execution_time):
+    if 3600 > execution_time > 60:
+        print(f"Время выполнения программы: {round(execution_time / 60, 1)} минут")
+    elif execution_time < 60:
+        print(f"Время выполнения программы: {round(execution_time, 1)} секунд")
+    else:
+        print(f"Время выполнения программы: {round(execution_time / 3600, 1)} часов")
