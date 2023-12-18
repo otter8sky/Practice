@@ -26,14 +26,26 @@ class Method:
 
     def add_to_list(self, methods):
         methods.append(self.name)
+class Angle:
+    def __init__(self, value):
+        value.strip('"')
+        degrees, min_sec = value.split('°')
+        minutes, seconds = min_sec.split("'")
+        value = pi * (float(degrees[1:]) + float(minutes) / 60 + float(seconds) / 3600) / 180
+        self.value = value
+        self.sign = str(degrees[:1])
+        self.degrees = float(degrees[1:])
+        self.minutes = float(minutes)
+        self.seconds = float(seconds)
+    # FIXME: create a function that changes angle to hours (def change_to_hours(self):)
 
 def vect(v, u):
     p = [v[1]*u[2] - v[2]*u[1], -(v[0]*u[2] - v[2]*u[0]), v[0]*u[1] - v[1]*u[0]]
     return p
 def scal(v, u):
     return v[0]*u[0] + v[1]*u[1] + v[2]*u[2]
-def mult(v, c):
-    u = [v[0]*c, v[1]*c, v[2]*c]
+def mult(v, a):
+    u = [v[0]*a, v[1]*a, v[2]*a]
     return u
 def add(a, b):
     c = [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
@@ -44,6 +56,18 @@ def get_r(a, b):
 def get_mag(r):
     mag = (r[0]**2 + r[1]**2 + r[2]**2)**0.5
     return mag
+def get_k(bodies, a_list_1, k_list, h):
+    result = copy(bodies)
+    for j in range(len(bodies)):
+        for i in range(len(k_list)):
+            result[j].vel[0] = result[j].vel[0] + k_list[i][j].acs[0] * a_list_1[i] * h
+            result[j].vel[1] = result[j].vel[1] + k_list[i][j].acs[1] * a_list_1[i] * h
+            result[j].vel[2] = result[j].vel[2] + k_list[i][j].acs[2] * a_list_1[i] * h
+
+            result[j].coord[0] = result[j].coord[0] + k_list[i][j].vel[0] * a_list_1[i] * h
+            result[j].coord[1] = result[j].coord[1] + k_list[i][j].vel[1] * a_list_1[i] * h
+            result[j].coord[2] = result[j].coord[2] + k_list[i][j].vel[2] * a_list_1[i] * h
+    return result
 
 def get_acs(m, r):
     a = mult(r, -G * m / (get_mag(r))**3)
