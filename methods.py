@@ -1,4 +1,5 @@
 from operations import *
+import numpy as np
 
 def By_Ex_Euler(bodies, time_step):
     result = copy(bodies)
@@ -85,11 +86,22 @@ def By_Leap_Frog(bodies, time_step):
         bodies[i].acs = result[i].acs[:]
     return result
 
-methods = [By_Ex_Euler, By_PC, By_RK_4, By_Verlet, By_Leap_Frog]
+def By_RK_N(bodies, time_step):
+    k_list = []
+    for i in range(len(b_list)):
+        k_list.append(get_k(copy(bodies), a_list[i], k_list, time_step))
+    result = get_acs_for_all(get_k(copy(bodies), b_list, k_list, time_step))
+    for i in range(len(bodies)):
+        bodies[i].coord = result[i].coord[:]
+        bodies[i].vel = result[i].vel[:]
+        bodies[i].acs = result[i].acs[:]
+    return result
+
+
+methods = [By_Ex_Euler, By_PC, By_RK_4, By_Verlet, By_Leap_Frog, By_RK_N]
 def fill_methods_names_list(methods_list):
     methods_names_list = []
     for i in range(len(methods_list)):
         methods_names_list.append(methods_list[i].__name__)
     return methods_names_list
 methods_names = fill_methods_names_list(methods)
-
