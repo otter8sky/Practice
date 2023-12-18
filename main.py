@@ -14,32 +14,33 @@ from methods import By_PC
 from methods import By_RK_4
 from methods import By_Verlet
 from methods import By_Leap_Frog
+from methods import By_RK_N
 from methods import methods
 from methods import methods_names
 from operations import *
 import winsound
 
 
-
 Methods = [By_Ex_Euler,
            By_PC,
            By_RK_4,
            By_Verlet,
-           By_Leap_Frog]
+           By_Leap_Frog,
+           By_RK_N]
 
 start_time = time.perf_counter()
 
-bodies = read_data_file('DATA.txt')
+bodies = read_data_file('data2.txt')
 # problem = read_comp_file('COMPUTING.txt')
 
 freq = 500
 dur = 800
 
-method = 'By_Leap_Frog'
-time_end = 100
-initial_timestep = 0.001
+method = 'By_RK_N'
+time_end = 1
+initial_timestep = 0.0001
 delta_vel = 0.001
-delta_coord = 0.001
+delta_coord = 0.0001
 delta_timestep = 0.0000001
 timestep_max = 0.01
 timestep_min = 0.0000001
@@ -55,11 +56,10 @@ comp(problem, bodies)
 # plot_cm(problem)
 # plot_time_step(problem)
 
-end_time = time.perf_counter()
-execution_time = end_time - start_time
-print_ex_time(execution_time)
-
-winsound.Beep(freq, dur)
-
+# end_time = time.perf_counter()
+# execution_time = end_time - start_time
+# print_ex_time(execution_time)
+#
+# winsound.Beep(freq, dur)
+#
 plot_all(problem, bodies)
-
