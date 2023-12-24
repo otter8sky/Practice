@@ -39,10 +39,10 @@ class Angle:
         self.seconds = float(seconds)
     # FIXME: create a function that changes angle to hours (def change_to_hours(self):)
 
-def vect(v, u):
+def vector_product(v, u):
     p = [v[1]*u[2] - v[2]*u[1], -(v[0]*u[2] - v[2]*u[0]), v[0]*u[1] - v[1]*u[0]]
     return p
-def scal(v, u):
+def scalar_product(v, u):
     return v[0]*u[0] + v[1]*u[1] + v[2]*u[2]
 def mult(v, a):
     u = [v[0]*a, v[1]*a, v[2]*a]
@@ -56,17 +56,19 @@ def get_r(a, b):
 def get_mag(r):
     mag = (r[0]**2 + r[1]**2 + r[2]**2)**0.5
     return mag
+
 def get_k(bodies, a_list_1, k_list, h):
     result = copy(bodies)
     for j in range(len(bodies)):
         for i in range(len(k_list)):
-            result[j].vel[0] = result[j].vel[0] + k_list[i][j].acs[0] * a_list_1[i] * h
-            result[j].vel[1] = result[j].vel[1] + k_list[i][j].acs[1] * a_list_1[i] * h
-            result[j].vel[2] = result[j].vel[2] + k_list[i][j].acs[2] * a_list_1[i] * h
+            result[j].coord[0] += k_list[i][j].vel[0] * a_list_1[i] * h
+            result[j].coord[1] += k_list[i][j].vel[1] * a_list_1[i] * h
+            result[j].coord[2] += k_list[i][j].vel[2] * a_list_1[i] * h
 
-            result[j].coord[0] = result[j].coord[0] + k_list[i][j].vel[0] * a_list_1[i] * h
-            result[j].coord[1] = result[j].coord[1] + k_list[i][j].vel[1] * a_list_1[i] * h
-            result[j].coord[2] = result[j].coord[2] + k_list[i][j].vel[2] * a_list_1[i] * h
+            result[j].vel[0] += k_list[i][j].acs[0] * a_list_1[i] * h
+            result[j].vel[1] += k_list[i][j].acs[1] * a_list_1[i] * h
+            result[j].vel[2] += k_list[i][j].acs[2] * a_list_1[i] * h
+    result = get_acs_for_all(result)
     return result
 
 def get_acs(m, r):
@@ -123,6 +125,38 @@ def get_Energy(bodies):
     energy = get_Kinetical_Energy(bodies) + get_Potential_Energy(bodies)
     return energy
 
+def get_coord_cm(bodies):
+    coord_cm = []
+    sum_xi_mi = 0
+    sum_yi_mi = 0
+    sum_zi_mi = 0
+    sum_mi = 0
+    for i in range(len(bodies)):
+        sum_xi_mi += bodies[i].coord[0] * bodies[i].mass
+        sum_yi_mi += bodies[i].coord[1] * bodies[i].mass
+        sum_zi_mi += bodies[i].coord[2] * bodies[i].mass
+        sum_mi += bodies[i].mass
+    coord_cm.append(sum_xi_mi / sum_mi)
+    coord_cm.append(sum_yi_mi / sum_mi)
+    coord_cm.append(sum_zi_mi / sum_mi)
+    return coord_cm
+def get_momentum(bodies, i):
+    momentum = mult(bodies[i].vel, bodies[i].mass)
+    return momentum
+def get_total_momentum(bodies):
+    vect_total_momentum = [0, 0, 0]
+    for i in range(len(bodies)):
+        vect_total_momentum = add(vect_total_momentum, get_momentum(bodies, i))[:]
+    return vect_total_momentum
+def get_angular_momentum(bodies, i):
+    impulse_moment = vector_product(bodies[i].coord, get_momentum(bodies, i))[:]
+    return impulse_moment
+def get_total_angular_momentum(bodies):
+    total_impulse_moment = [0, 0, 0]
+    for i in range(len(bodies)):
+        total_impulse_moment = add(total_impulse_moment, get_angular_momentum(bodies, i))[:]
+    return total_impulse_moment
+
 def copy(bodies):
     copied_bodies = []
     for i in range(len(bodies)):
@@ -173,26 +207,6 @@ def get_time_step(bodies, time_step, problem):
         return time_step + problem.delta_timestep
     else:
         return time_step
-def get_coord_cm(bodies):
-    coord_cm = []
-    sum_xi_mi = 0
-    sum_yi_mi = 0
-    sum_zi_mi = 0
-    sum_mi = 0
-    for i in range(len(bodies)):
-        sum_xi_mi += bodies[i].coord[0] * bodies[i].mass
-        sum_yi_mi += bodies[i].coord[1] * bodies[i].mass
-        sum_zi_mi += bodies[i].coord[2] * bodies[i].mass
-        sum_mi += bodies[i].mass
-    coord_cm.append(sum_xi_mi / sum_mi)
-    coord_cm.append(sum_yi_mi / sum_mi)
-    coord_cm.append(sum_zi_mi / sum_mi)
-    return coord_cm
-def get_vect_total_momentum(bodies):
-    vect_total_momentum = [0, 0, 0]
-    for i in range(len(bodies)):
-        vect_total_momentum = add(vect_total_momentum, mult(bodies[i].vel, bodies[i].mass))[:]
-    return vect_total_momentum
 
 def clear_all_datafiles(bodies):
     for i in range(len(bodies)):
@@ -220,12 +234,6 @@ def clear_all_datafiles(bodies):
     f.truncate(0)
     f.write("time, years\ttime step, years")
     f.close()
-
-def get_method(method_name, methods, methods_names):
-    for i in range(len(methods_names)):
-        if method_name == methods_names[i]:
-            return methods[i]
-
 def print_ex_time(execution_time):
     if 3600 > execution_time > 60:
         print(f"Время выполнения программы: {round(execution_time / 60, 1)} минут")
@@ -233,3 +241,8 @@ def print_ex_time(execution_time):
         print(f"Время выполнения программы: {round(execution_time, 1)} секунд")
     else:
         print(f"Время выполнения программы: {round(execution_time / 3600, 1)} часов")
+
+def get_method(method_name, methods, methods_names):
+    for i in range(len(methods_names)):
+        if method_name == methods_names[i]:
+            return methods[i]
