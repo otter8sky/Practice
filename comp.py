@@ -17,78 +17,152 @@ def read_comp_file(file_name):
     delta_timestep = float(df_data['delta_timestep, years'].tolist()[0])
     timestep_max = float(df_data['timestep_max, years'].tolist()[0])
     timestep_min = float(df_data['timestep_min, years'].tolist()[0])
+    dt_output = float(df_data['dt_output, years'].tolist()[0])
     problem = Problem(get_method(method, methods, methods_names), time_end, initial_timestep, delta_vel,
-                      delta_coord, delta_timestep, timestep_max, timestep_min)
+                      delta_coord, delta_timestep, timestep_max, timestep_min, dt_output)
     return problem
 def read_data_file(file_name):
     df_data = pd.read_csv(Path(Path.cwd(), "data", "initial data", f"{file_name}"), header=0, sep="\t")
     names = df_data['Object'].tolist()
-    coordinates_x = df_data['X, a.u.'].tolist()
-    coordinates_y = df_data['Y, a.u.'].tolist()
-    coordinates_z = df_data['Z, a.u.'].tolist()
+    coordinates_x = df_data['X, au'].tolist()
+    coordinates_y = df_data['Y, au'].tolist()
+    coordinates_z = df_data['Z, au'].tolist()
 
-    velocities_x = df_data["Vx, a.u./year"].tolist()
-    velocities_y = df_data['Vy, a.u./year'].tolist()
-    velocities_z = df_data['Vz, a.u./year'].tolist()
+    # velocities_x = df_data["Vx, a.u./year"].tolist()
+    # velocities_y = df_data['Vy, a.u./year'].tolist()
+    # velocities_z = df_data['Vz, a.u./year'].tolist()
 
+    velocities_x = df_data["Vx, au/day"].tolist()
+    velocities_y = df_data['Vy, au/day'].tolist()
+    velocities_z = df_data['Vz, au/day'].tolist()
+    for i in range(len(velocities_x)):
+        velocities_x[i] = velocities_x[i] * 365.2422
+        velocities_y[i] = velocities_y[i] * 365.2422
+        velocities_z[i] = velocities_z[i] * 365.2422
     masses = df_data['Mass, M_sun'].tolist()
+    # FIXME: get radii for all planets!!
+    # radii = df_data['Radius, R_sun'].tolist()
     colors = df_data['color'].tolist()
     bodies = []
     for i in range(len(names)):
         bodies.append(Body([float(velocities_x[i]), float(velocities_y[i]), float(velocities_z[i])],
+                           [float(velocities_x[i]), float(velocities_y[i]), float(velocities_z[i])],
                            [float(coordinates_x[i]), float(coordinates_y[i]), float(coordinates_z[i])],
                            float(masses[i]), [0, 0, 0], names[i], colors[i]))
     bodies = get_acs_for_all(bodies)
     return bodies
+
 def comp(problem, bodies):
     cnt = 0
     t = 0
     time_step = problem.initial_timestep
     timestep = [time_step]
-    bodies_coord = [[[bodies[i].coord[0]], [bodies[i].coord[1]], [bodies[i].coord[2]]] for i in range(len(bodies))]
-    bodies_vel = [[[bodies[i].vel[0]], [bodies[i].vel[1]], [bodies[i].vel[2]]] for i in range(len(bodies))]
+    bodies_coord = [[[bodies[i].coord[0]],
+                     [bodies[i].coord[1]],
+                     [bodies[i].coord[2]]] for i in range(len(bodies))]
+    bodies_vel = [[[bodies[i].vel[0]],
+                   [bodies[i].vel[1]],
+                   [bodies[i].vel[2]]] for i in range(len(bodies))]
+    bodies_axis = [[major_axis(bodies, i)] for i in range(len(bodies))]
+    bodies_ecc = [[eccentricity(bodies, i)] for i in range(len(bodies))]
+    bodies_inc = [[inclination(bodies, i)] for i in range(len(bodies))]
+    bodies_long = [[longitude_of_asc_node(bodies, i)] for i in range(len(bodies))]
+    bodies_per = [[arg_of_periapsis(bodies, i)] for i in range(len(bodies))]
+
     energy = [get_Energy(bodies)]
     time_full = [t]
     time = [t]
-    cm_coord = [[], [], []]
-    mom_coord = [[], [], []]
-    mag_mom = []
+    cm_coord = [[get_coord_cm(bodies)[0]],
+                [get_coord_cm(bodies)[1]],
+                [get_coord_cm(bodies)[2]]]
+    mom_coord = [[get_total_momentum(bodies)[0]],
+                 [get_total_momentum(bodies)[1]],
+                 [get_total_momentum(bodies)[2]]]
+    mag_mom = [get_mag(get_total_momentum(bodies))]
+    ang_mom_coord = [[get_total_angular_momentum(bodies)[0]],
+                     [get_total_angular_momentum(bodies)[1]],
+                     [get_total_angular_momentum(bodies)[2]]]
+    mag_ang_mom = [get_mag(get_total_angular_momentum(bodies))]
+
+    next_output = problem.dt_output
+
     while t <= problem.time_end:
-        print(t * 100/problem.time_end, "%")
+        print(round(t * 100/problem.time_end, 2), "%")
         time_full.append(t)
         if t == 0 and problem.method == By_Leap_Frog:
             for i in range(len(bodies)):
-                bodies[i].vel = add(bodies[i].vel, mult(bodies[i].acs, time_step / 2))
-                # bodies_vel[i][0] = bodies[i].vel
+                # FIXME: change velocities into correct ones in Leap-Frog
+                bodies[i].half_vel = add(bodies[i].vel, mult(bodies[i].acs, time_step / 2))
         time_step = get_time_step(bodies, time_step, problem)
         timestep.append(time_step)
         result = problem.method(bodies, time_step)
-        if cnt == 1:
-            for i in range(len(bodies)):
-                bodies_coord[i][0].append(bodies[i].coord[0])
-                bodies_coord[i][1].append(bodies[i].coord[1])
-                bodies_coord[i][2].append(bodies[i].coord[2])
-                bodies_vel[i][0].append(bodies[i].vel[0])
-                bodies_vel[i][1].append(bodies[i].vel[1])
-                bodies_vel[i][2].append(bodies[i].vel[2])
 
-            cm_coord[0].append(get_coord_cm(bodies)[0])
-            cm_coord[1].append(get_coord_cm(bodies)[1])
-            cm_coord[2].append(get_coord_cm(bodies)[2])
-            mom_coord[0].append(get_vect_total_momentum(bodies)[0])
-            mom_coord[1].append(get_vect_total_momentum(bodies)[1])
-            mom_coord[2].append(get_vect_total_momentum(bodies)[2])
-            mag_mom.append(get_mag(get_vect_total_momentum(bodies)))
+        if abs(t - next_output) <= problem.dt_output:
+            cnt += 1
+            for i in range(len(bodies)):
+                bodies_coord[i] = fill_coord_list_3d(bodies_coord[i], bodies[i])[:]
+                bodies_vel[i] = fill_vel_list_3d(bodies_vel[i], bodies[i])[:]
+
+                bodies_axis[i].append(major_axis(bodies, i))
+                bodies_ecc[i].append(eccentricity(bodies, i))
+                bodies_inc[i].append(inclination(bodies, i))
+                bodies_long[i].append(longitude_of_asc_node(bodies, i))
+                bodies_per[i].append(arg_of_periapsis(bodies, i))
+
+            cm_coord = fill_list_3d_func(cm_coord, get_coord_cm, bodies)[:]
+            mom_coord = fill_list_3d_func(mom_coord, get_total_momentum, bodies)[:]
+            mag_mom.append(get_mag(get_total_momentum(bodies)))
+            ang_mom_coord = fill_list_3d_func(ang_mom_coord, get_total_angular_momentum, bodies)[:]
+            mag_ang_mom.append(get_mag(get_total_angular_momentum(bodies)))
             time.append(t)
             energy.append(get_Energy(result))
-            cnt = 0
-        cnt += 1
-        t += time_step
-    if problem.method == By_Leap_Frog:
-        for i in range(len(bodies)):
-            bodies[i].vel = add(bodies[i].vel, mult(bodies[i].acs, -time_step / 2))
-            # bodies_vel.append(bodies[i].vel)
 
+            next_output += problem.dt_output
+        t += time_step
+
+    for i in range(len(bodies)):
+        bodies_coord[i] = fill_coord_list_3d(bodies_coord[i], bodies[i])[:]
+        bodies_vel[i] = fill_vel_list_3d(bodies_vel[i], bodies[i])[:]
+
+        bodies_axis[i].append(major_axis(bodies, i))
+        bodies_ecc[i].append(eccentricity(bodies, i))
+        bodies_inc[i].append(inclination(bodies, i))
+        bodies_long[i].append(longitude_of_asc_node(bodies, i))
+        bodies_per[i].append(arg_of_periapsis(bodies, i))
+
+    cm_coord = fill_list_3d_func(cm_coord, get_coord_cm, bodies)[:]
+    mom_coord = fill_list_3d_func(mom_coord, get_total_momentum, bodies)[:]
+    mag_mom.append(get_mag(get_total_momentum(bodies)))
+    ang_mom_coord = fill_list_3d_func(ang_mom_coord, get_total_angular_momentum, bodies)[:]
+    mag_ang_mom.append(get_mag(get_total_angular_momentum(bodies)))
+    time.append(t)
+    energy.append(get_Energy(bodies))
+
+    # if problem.method == By_Leap_Frog:
+    #     for i in range(len(bodies)):
+    #         bodies[i].vel = add(bodies[i].vel, mult(bodies[i].acs, -time_step / 2))
+    #         # bodies_vel.append(bodies[i].vel)
+
+    # plt.plot(time_full, axx, color='red')
+    # plt.title(f"{problem.method.__name__}", fontsize=20, color="red")
+    # plt.xlabel('time, years')
+    # plt.ylabel('major axis, au')
+    # plt.savefig(Path(Path.cwd(), "data", "data out", "plots", f"{problem.method.__name__}_axis.png"))
+    # plt.show()
+    #
+    # plt.plot(time_full, ecc, color='green')
+    # plt.title(f"{problem.method.__name__}", fontsize=20, color="green")
+    # plt.xlabel('time, years')
+    # plt.ylabel('eccentricity')
+    # plt.savefig(Path(Path.cwd(), "data", "data out", "plots", f"{problem.method.__name__}_ecc.png"))
+    # plt.show()
+    #
+    # plt.plot(time_full, inc, color='blue')
+    # plt.title(f"{problem.method.__name__}", fontsize=20, color="red")
+    # plt.xlabel('time, years')
+    # plt.ylabel('inclination, degrees')
+    # plt.savefig(Path(Path.cwd(), "data", "data out", "plots", f"{problem.method.__name__}_inc.png"))
+    # plt.show()
     time_full = pd.Series(time_full).to_frame(name="time, years")
     time = pd.Series(time).to_frame(name="time, years")
     timestep = pd.Series(timestep).to_frame(name="time step, years")
@@ -105,12 +179,19 @@ def comp(problem, bodies):
     df_cm = pd.concat([time, cm_x, cm_y, cm_z], axis=1)
     df_cm.to_csv(Path(Path.cwd(), "data", "data out", "center_mass.txt"), sep="\t")
 
-    mom_x = pd.Series(mom_coord[0]).to_frame(name="momentum_x, a.u.")
-    mom_y = pd.Series(mom_coord[1]).to_frame(name="momentum_y, a.u.")
-    mom_z = pd.Series(mom_coord[2]).to_frame(name="momentum_z, a.u.")
+    mom_x = pd.Series(mom_coord[0]).to_frame(name="momentum_x")
+    mom_y = pd.Series(mom_coord[1]).to_frame(name="momentum_y")
+    mom_z = pd.Series(mom_coord[2]).to_frame(name="momentum_z")
     mag_mom = pd.Series(mag_mom).to_frame(name="momentum_mag")
-    df_cm = pd.concat([time, mom_x, mom_y, mom_z, mag_mom], axis=1)
-    df_cm.to_csv(Path(Path.cwd(), "data", "data out", "momentum.txt"), sep="\t")
+    df_mom = pd.concat([time, mom_x, mom_y, mom_z, mag_mom], axis=1)
+    df_mom.to_csv(Path(Path.cwd(), "data", "data out", "momentum.txt"), sep="\t")
+
+    ang_mom_x = pd.Series(ang_mom_coord[0]).to_frame(name="angular_momentum_x")
+    ang_mom_y = pd.Series(ang_mom_coord[1]).to_frame(name="angular_momentum_y")
+    ang_mom_z = pd.Series(ang_mom_coord[2]).to_frame(name="angular_momentum_z")
+    ang_mag_mom = pd.Series(mag_ang_mom).to_frame(name="angular_momentum_mag")
+    df_ang_mom = pd.concat([time, ang_mom_x, ang_mom_y, ang_mom_z, ang_mag_mom], axis=1)
+    df_ang_mom.to_csv(Path(Path.cwd(), "data", "data out", "angular momentum.txt"), sep="\t")
 
     for i in range(len(bodies)):
         x_i = pd.Series(bodies_coord[i][0]).to_frame(name="X, a.u.")
@@ -119,16 +200,29 @@ def comp(problem, bodies):
         vel_x_i = pd.Series(bodies_vel[i][0]).to_frame(name="V_x, years")
         vel_y_i = pd.Series(bodies_vel[i][1]).to_frame(name="V_y, a.u./year")
         vel_z_i = pd.Series(bodies_vel[i][2]).to_frame(name="V_z, a.u./year")
+
         df_i = pd.concat([time, x_i, y_i, z_i, vel_x_i, vel_y_i, vel_z_i], axis=1)
-        df_i.to_csv(Path(Path.cwd(), "data", "objects", f"{bodies[i].name}.txt"), sep="\t")
+        df_i.to_csv(Path(Path.cwd(), "data", "data out", "objects", f"{bodies[i].name}.txt"), sep="\t")
+
+        a_i = pd.Series(bodies_axis[i]).to_frame(name="a, a.u.")
+        e_i = pd.Series(bodies_ecc[i]).to_frame(name="e")
+        i_i = pd.Series(bodies_inc[i]).to_frame(name="i, degrees")
+        long_of_asc_node_i = pd.Series(bodies_long[i]).to_frame(name="long_of_asc_node, degrees")
+        arg_of_periapsis_i = pd.Series(bodies_per[i]).to_frame(name="arg_of_periapsis, degrees")
+
+        df_i = pd.concat([time, a_i, e_i, i_i, long_of_asc_node_i, arg_of_periapsis_i], axis=1)
+        df_i.to_csv(Path(Path.cwd(), "data", "data out", "elements", f"elements of {bodies[i].name}.txt"), sep="\t")
 
 def plot_bodies(bodies, problem):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
     for i in range(len(bodies)):
-        df_i = pd.read_csv(Path(Path.cwd(), "data", "objects", f"{bodies[i].name}.txt"), header=0, sep="\t")
+        df_i = pd.read_csv(Path(Path.cwd(), "data", "data out", "objects", f"{bodies[i].name}.txt"), header=0, sep="\t")
         x_i = df_i['X, a.u.'].tolist()
         y_i = df_i['Y, a.u.'].tolist()
         z_i = df_i['Z, a.u.'].tolist()
-        plt.plot(x_i, y_i, color=bodies[i].color, label=bodies[i].name)
+        ax.plot(x_i, y_i, z_i, color=bodies[i].color, label=bodies[i].name)
+        # plt.plot(x_i, y_i, color=bodies[i].color, label=bodies[i].name)
     plt.title(f"{problem.method.__name__} for {problem.time_end} year(s)", fontsize=20, color="purple")
     plt.xlabel('X, а.е.')
     plt.ylabel('Y, а.е.')
@@ -137,6 +231,46 @@ def plot_bodies(bodies, problem):
     plt.grid(which='minor', linestyle=':')
     plt.gca().set_aspect("equal")
     plt.tight_layout()
+    plt.show()
+def plot_elements(bodies, problem):
+    figure, axis = plt.subplots(1, 3)
+
+    elements = [[] for i in range(5)]
+    list_for_elements = [["major axis", "au"],
+                         ["eccentricity", ""],
+                         ["inclination", "degrees"],
+                         ["longitude of ascending node", "degrees"],
+                         ["argument of periapsis", "degrees"]]
+    for j in range(len(bodies)):
+        df_j = pd.read_csv(Path(Path.cwd(), "data", "data out", "elements", f"elements of {bodies[j].name}.txt"),
+                           header=0, sep="\t")
+        time = df_j['time, years'].tolist()
+        elements[0].append(df_j["a, a.u."].tolist())
+        elements[1].append(df_j["e"].tolist())
+        elements[2].append(df_j["i, degrees"].tolist())
+        elements[3].append(df_j["long_of_asc_node, degrees"].tolist())
+        elements[4].append(df_j["arg_of_periapsis, degrees"].tolist())
+
+    for i in range(len(bodies)):
+        axis[0].plot(time, elements[0][i], color=bodies[i].color, label=bodies[i].name)
+        axis[1].plot(time, elements[1][i], color=bodies[i].color, label=bodies[i].name)
+        axis[2].plot(time, elements[2][i], color=bodies[i].color, label=bodies[i].name)
+
+    axis[0].set_title("major axis")
+    axis[1].set_title("eccentricity")
+    axis[2].set_title("inclination")
+    plt.legend(loc='best')
+
+    figure, axis = plt.subplots(1, 2)
+
+    for i in range(len(bodies)):
+        axis[0].plot(time, elements[3][i], color=bodies[i].color, label=bodies[i].name)
+        axis[1].plot(time, elements[4][i], color=bodies[i].color, label=bodies[i].name)
+
+    axis[0].set_title("longitude of ascending node")
+    axis[1].set_title("argument of periapsis")
+    plt.legend(loc='best')
+
     plt.show()
 def plot_energy(problem):
     df_en = pd.read_csv(Path(Path.cwd(), "data", "data out", "energy.txt"), header=0, sep="\t")
@@ -152,9 +286,9 @@ def plot_energy(problem):
 def plot_momentum(problem):
     df_mom = pd.read_csv(Path(Path.cwd(), "data", "data out", "momentum.txt"), header=0, sep="\t")
     time = df_mom['time, years'].tolist()
-    momentum_x = df_mom['momentum_y, a.u.'].tolist()
-    momentum_y = df_mom['momentum_y, a.u.'].tolist()
-    momentum_z = df_mom['momentum_z, a.u.'].tolist()
+    momentum_x = df_mom['momentum_x'].tolist()
+    momentum_y = df_mom['momentum_y'].tolist()
+    momentum_z = df_mom['momentum_z'].tolist()
     momentum_mag = df_mom['momentum_mag'].tolist()
 
     plt.plot(momentum_x, momentum_y, color='blue')
@@ -165,6 +299,27 @@ def plot_momentum(problem):
 
     plt.plot(time, momentum_mag, color='purple')
     plt.title(f"{problem.method.__name__} magnitude of vector of total momentum", fontsize=20, color="purple")
+    plt.xlabel('time, years')
+    plt.ylabel('magnitude')
+    plt.show()
+def plot_angular_momentum(problem):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    df_mom = pd.read_csv(Path(Path.cwd(), "data", "data out", "angular momentum.txt"), header=0, sep="\t")
+    time = df_mom['time, years'].tolist()
+    ang_mom_x = df_mom['angular_momentum_x'].tolist()
+    ang_mom_y = df_mom['angular_momentum_y'].tolist()
+    ang_mom_z = df_mom['angular_momentum_z'].tolist()
+    ang_mom_mag = df_mom['angular_momentum_mag'].tolist()
+
+    ax.plot(ang_mom_x, ang_mom_y, ang_mom_z, color='blue')
+    plt.title(f"{problem.method.__name__} vector of total momentum", fontsize=20, color="blue")
+    plt.xlabel('X')
+    plt.ylabel('Y')
+    plt.show()
+
+    plt.plot(time, ang_mom_mag, color='cyan')
+    plt.title(f"{problem.method.__name__} magnitude of vector of angular momentum", fontsize=20, color="black")
     plt.xlabel('time, years')
     plt.ylabel('magnitude')
     plt.show()
@@ -219,14 +374,15 @@ def plot_all(problem, bodies):
     plt.xlabel('time, years')
     plt.ylabel('energy')
 
-    plt.figure()
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
     df_mom = pd.read_csv(Path(Path.cwd(), "data", "data out", "momentum.txt"), header=0, sep="\t")
     time = df_mom['time, years'].tolist()
-    momentum_x = df_mom['momentum_y, a.u.'].tolist()
-    momentum_y = df_mom['momentum_y, a.u.'].tolist()
-    momentum_z = df_mom['momentum_z, a.u.'].tolist()
+    momentum_x = df_mom['momentum_y'].tolist()
+    momentum_y = df_mom['momentum_y'].tolist()
+    momentum_z = df_mom['momentum_z'].tolist()
     momentum_mag = df_mom['momentum_mag'].tolist()
-    plt.plot(momentum_x, momentum_y, color='blue')
+    plt.plot(momentum_x, momentum_y, momentum_z, color='blue')
     plt.title(f"{problem.method.__name__} vector of total momentum", fontsize=20, color="blue")
     plt.xlabel('X, a.u.')
     plt.ylabel('Y, a.u.')
@@ -237,13 +393,14 @@ def plot_all(problem, bodies):
     plt.xlabel('time, years')
     plt.ylabel('magnitude')
 
-    plt.figure()
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
     df_cm = pd.read_csv(Path(Path.cwd(), "data", "data out", "center_mass.txt"), header=0, sep="\t")
     time = df_cm['time, years'].tolist()
     coord_cm_x = df_cm['cm_x, a.u.'].tolist()
     coord_cm_y = df_cm['cm_y, a.u.'].tolist()
     coord_cm_z = df_cm['cm_z, a.u.'].tolist()
-    plt.plot(coord_cm_x, coord_cm_y, color='red')
+    plt.plot(coord_cm_x, coord_cm_y, coord_cm_z, color='red')
     plt.title(f"{problem.method.__name__} trajectory of center of mass ({problem.time_end} years)",
               fontsize=20, color="green")
     plt.xlabel('X, a.u.')
@@ -257,4 +414,24 @@ def plot_all(problem, bodies):
     plt.title(f"Magnitude of time step ({problem.method.__name__})", fontsize=20, color="green")
     plt.xlabel('time, years')
     plt.ylabel('time step, years')
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    df_mom = pd.read_csv(Path(Path.cwd(), "data", "data out", "angular momentum.txt"), header=0, sep="\t")
+    time = df_mom['time, years'].tolist()
+    ang_mom_x = df_mom['angular_momentum_x'].tolist()
+    ang_mom_y = df_mom['angular_momentum_y'].tolist()
+    ang_mom_z = df_mom['angular_momentum_z'].tolist()
+    ang_mom_mag = df_mom['angular_momentum_mag'].tolist()
+
+    ax.plot(ang_mom_x, ang_mom_y, ang_mom_z, color='blue')
+    plt.title(f"{problem.method.__name__} vector of angular momentum", fontsize=20, color="blue")
+    plt.xlabel('X')
+    plt.ylabel('Y')
+
+    plt.figure()
+    plt.plot(time, ang_mom_mag, color='cyan')
+    plt.title(f"{problem.method.__name__} magnitude of vector of angular momentum", fontsize=20, color="black")
+    plt.xlabel('time, years')
+    plt.ylabel('magnitude')
     plt.show()
