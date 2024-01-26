@@ -4,6 +4,8 @@ from methods import methods_names
 from methods import By_Leap_Frog
 import pandas as pd
 from pathlib import Path
+import os
+import re
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 
@@ -21,37 +23,43 @@ def read_comp_file(file_name):
     problem = Problem(get_method(method, methods, methods_names), time_end, initial_timestep, delta_vel,
                       delta_coord, delta_timestep, timestep_max, timestep_min, dt_output)
     return problem
-def read_data_file(file_name):
-    df_data = pd.read_csv(Path(Path.cwd(), "data", "initial data", f"{file_name}"), header=0, sep="\t")
-    names = df_data['Object'].tolist()
-    coordinates_x = df_data['X, au'].tolist()
-    coordinates_y = df_data['Y, au'].tolist()
-    coordinates_z = df_data['Z, au'].tolist()
-
-    # velocities_x = df_data["Vx, a.u./year"].tolist()
-    # velocities_y = df_data['Vy, a.u./year'].tolist()
-    # velocities_z = df_data['Vz, a.u./year'].tolist()
-
-    velocities_x = df_data["Vx, au/day"].tolist()
-    velocities_y = df_data['Vy, au/day'].tolist()
-    velocities_z = df_data['Vz, au/day'].tolist()
-    for i in range(len(velocities_x)):
-        velocities_x[i] = velocities_x[i] * 365.2422
-        velocities_y[i] = velocities_y[i] * 365.2422
-        velocities_z[i] = velocities_z[i] * 365.2422
-    masses = df_data['Mass, M_sun'].tolist()
-    # FIXME: get radii for all planets!!
-    # radii = df_data['Radius, R_sun'].tolist()
-    colors = df_data['color'].tolist()
+def read_data_file():
     bodies = []
-    for i in range(len(names)):
-        bodies.append(Body([float(velocities_x[i]), float(velocities_y[i]), float(velocities_z[i])],
-                           [float(velocities_x[i]), float(velocities_y[i]), float(velocities_z[i])],
-                           [float(coordinates_x[i]), float(coordinates_y[i]), float(coordinates_z[i])],
-                           float(masses[i]), [0, 0, 0], names[i], colors[i]))
+    for f in os.listdir(Path(Path.cwd(), "data", "initial data", "coordinates")):
+        f = open(Path(Path.cwd(), "data", "initial data", "coordinates", f"{f}"), "r")
+        file = f.read()
+
+        match = re.search(r'Object *: *\w+', file)
+        if match:
+            name_i = re.split(r' *: *', match[0])[1]
+            print(name_i)
+        else:
+            print("Pattern not found")
+
+        file = re.split(r"\n", file)
+
+        data = re.split(r" +", file[-2])
+
+        x_i = float(data[6])
+        y_i = float(data[7])
+        z_i = float(data[8])
+        vx_i = float(data[9]) * 365.2422
+        vy_i = float(data[10]) * 365.2422
+        vz_i = float(data[11]) * 365.2422
+
+        df_data = pd.read_csv(Path(Path.cwd(), "data", "initial data", "fixed data", "DATA.txt"), header=0, sep="\t")
+        data_i = df_data[f"{name_i}"]
+        mass_i = data_i[0]
+        color_i = data_i[1]
+
+        bodies.append(Body([vx_i, vy_i, vz_i],
+                           [vx_i, vy_i, vz_i],
+                           [x_i, y_i, z_i],
+                           float(mass_i), [0, 0, 0], name_i, color_i))
+        print("OK")
+    print(bodies[-1])
     bodies = get_acs_for_all(bodies)
     return bodies
-
 def comp(problem, bodies):
     cnt = 0
     t = 0
@@ -138,31 +146,6 @@ def comp(problem, bodies):
     time.append(t)
     energy.append(get_Energy(bodies))
 
-    # if problem.method == By_Leap_Frog:
-    #     for i in range(len(bodies)):
-    #         bodies[i].vel = add(bodies[i].vel, mult(bodies[i].acs, -time_step / 2))
-    #         # bodies_vel.append(bodies[i].vel)
-
-    # plt.plot(time_full, axx, color='red')
-    # plt.title(f"{problem.method.__name__}", fontsize=20, color="red")
-    # plt.xlabel('time, years')
-    # plt.ylabel('major axis, au')
-    # plt.savefig(Path(Path.cwd(), "data", "data out", "plots", f"{problem.method.__name__}_axis.png"))
-    # plt.show()
-    #
-    # plt.plot(time_full, ecc, color='green')
-    # plt.title(f"{problem.method.__name__}", fontsize=20, color="green")
-    # plt.xlabel('time, years')
-    # plt.ylabel('eccentricity')
-    # plt.savefig(Path(Path.cwd(), "data", "data out", "plots", f"{problem.method.__name__}_ecc.png"))
-    # plt.show()
-    #
-    # plt.plot(time_full, inc, color='blue')
-    # plt.title(f"{problem.method.__name__}", fontsize=20, color="red")
-    # plt.xlabel('time, years')
-    # plt.ylabel('inclination, degrees')
-    # plt.savefig(Path(Path.cwd(), "data", "data out", "plots", f"{problem.method.__name__}_inc.png"))
-    # plt.show()
     time_full = pd.Series(time_full).to_frame(name="time, years")
     time = pd.Series(time).to_frame(name="time, years")
     timestep = pd.Series(timestep).to_frame(name="time step, years")

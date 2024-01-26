@@ -83,7 +83,6 @@ def By_Verlet(bodies, time_step):
 
 def By_Leap_Frog(bodies, time_step):
     result = copy(bodies)
-    # FIXME: correct velocities
     for i in range(len(bodies)):
         result[i].coord = add(bodies[i].coord, mult(bodies[i].half_vel, time_step))
         result = get_acs_for_all(result)

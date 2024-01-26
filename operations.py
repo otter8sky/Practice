@@ -1,5 +1,6 @@
 from const import *
 from pathlib import Path
+import pandas as pd
 
 class Body:
     def __init__(self, vel, half_vel, coord, mass, acs, name, color):
@@ -41,6 +42,46 @@ class Angle:
         self.minutes = float(minutes)
         self.seconds = float(seconds)
     # FIXME: create a function that changes angle to hours (def change_to_hours(self):)
+
+def read_strange_data_file(file_name):
+    df_data = pd.read_csv(Path(Path.cwd(), "data", "initial data", f"{file_name}"), header=0, sep="\t")
+    names = df_data['Name'].tolist()
+    colors = df_data['Color'].tolist()
+    masses = df_data['Mass'].tolist()
+    velocities = df_data['Velocity'].tolist()
+    delta = df_data['Latitude'].tolist()
+    alpha = df_data['Longitude'].tolist()
+    distance = df_data['Distance'].tolist()
+    d_alpha = df_data['d/alpha'].tolist()
+    d_delta = df_data['d/delta'].tolist()
+    # a = np.array....
+    for i in range(len(alpha)):
+        delta[i] = Angle(delta[i])
+        alpha[i] = Angle(alpha[i])
+        d_alpha[i] = Angle(d_alpha[i])
+        d_delta[i] = Angle(d_delta[i])
+
+    bodies = []
+    hour = 3600
+
+    for i in range(len(names)):
+        x_i = distance[i] * np.cos(delta[i].value) * np.cos(alpha[i].value)
+        y_i = distance[i] * np.cos(delta[i].value) * np.sin(alpha[i].value)
+        z_i = distance[i] * np.sin(delta[i].value)
+
+        vel_x_i = change_vel(velocities[i] * np.cos(delta[i].value) * np.cos(alpha[i].value) - distance[i] *
+                             d_delta[i].value / hour * np.sin(delta[i].value) * np.cos(alpha[i].value) - distance[i] *
+                             d_alpha[i].value / hour * np.cos(delta[i].value) * np.sin(alpha[i].value))
+        vel_y_i = change_vel(velocities[i] * np.cos(delta[i].value) * np.sin(alpha[i].value) - distance[i] *
+                             d_delta[i].value / hour * np.sin(delta[i].value) * np.sin(alpha[i].value) + distance[i] *
+                             d_alpha[i].value / hour * np.cos(delta[i].value) * np.cos(alpha[i].value))
+        vel_z_i = change_vel(velocities[i] * np.sin(delta[i].value) + distance[i] *
+                             d_alpha[i].value / hour * np.cos(delta[i].value))
+
+        bodies.append(Body([vel_x_i, vel_y_i, vel_z_i], [x_i, y_i, z_i],
+                           float(masses[i]), [0, 0, 0], names[i], colors[i]))
+    bodies = get_acs_for_all(bodies)
+    return bodies
 
 def vector_product(v, u):
     p = [v[1] * u[2] - v[2] * u[1], -(v[0] * u[2] - v[2] * u[0]), v[0] * u[1] - v[1] * u[0]]
@@ -324,19 +365,19 @@ def true_anomaly(bodies, i):
     v = get_mag(get_r(bodies[i].vel, bodies[i_max_mass].vel))
     p = focal_parameter(bodies, i)
 
-    theta = np.arctan2(v * r * np.sqrt(p / kappa_2), p - r)
+    theta = np.arctan2(v * r * np.sqrt(p / kappa_2), p - r) * 180 / np.pi
     return theta
 def eccentric_anomaly(bodies, i):
     e = eccentricity(bodies, i)
     theta = true_anomaly(bodies, i)
 
-    E = 2 * np.arctan2(np.tan(theta / 2), np.sqrt((1 + e) / (1 - e)))
+    E = 2 * (np.arctan2(np.tan(theta / 2), np.sqrt((1 + e) / (1 - e)))) * 180 / np.pi
     return E
 def middle_anomaly(bodies, i):
     E = eccentric_anomaly(bodies, i)
     e = eccentricity(bodies, i)
 
-    M = E - e * np.sin(E)
+    M = (E - e * np.sin(E)) * 180 / np.pi
     return M
 def inclination(bodies, i):
     max_m, i_max_mass = max_mass(bodies)
@@ -364,7 +405,7 @@ def longitude_of_asc_node(bodies, i):
         v_y = get_r(bodies[i].vel, bodies[i_max_mass].vel)[1]
         v_z = get_r(bodies[i].vel, bodies[i_max_mass].vel)[2]
 
-        THETA = np.arctan2(z * v_y - y * v_z, z * v_x - x * v_z)
+        THETA = np.arctan2(z * v_y - y * v_z, z * v_x - x * v_z) * 180 / np.pi
         return THETA
 def arg_of_periapsis(bodies, i):
     max_m, i_max_mass = max_mass(bodies)
@@ -376,7 +417,9 @@ def arg_of_periapsis(bodies, i):
         r = get_mag(get_r(bodies[i].coord, bodies[i_max_mass].coord))
         u = np.arcsin(z / (np.sin(inc) * r))
 
-        g = u - true_anomaly(bodies, i)
+        g = (u - true_anomaly(bodies, i)) * 180 / np.pi
+
+        g = np.arctan2(np.tan(g / 180 * np.pi), 1) * 180 / np.pi
         return g
 
 def get_kepler_elements(bodies, i):

@@ -32,11 +32,11 @@ Methods = [By_Ex_Euler,
 
 start_time = time.perf_counter()
 
-bodies = read_data_file('data_correct.txt')
+bodies = read_data_file()
 # problem = read_comp_file('COMPUTING.txt')
 
-method = 'By_Leap_Frog'
-time_end = 10
+method = 'By_RK_4'
+time_end = 1
 initial_timestep = 0.0001
 delta_vel = 0.001
 delta_coord = 0.0001
@@ -50,20 +50,22 @@ problem = Problem(get_method(method, methods, methods_names), time_end, initial_
 clear_all_datafiles(bodies)
 comp(problem, bodies)
 
+# TODO: сделать отдельный файл, где можно просто графики строить
+
 end_time = time.perf_counter()
 execution_time = end_time
 print_ex_time(execution_time)
 #
-# plot_bodies(bodies, problem)
+plot_bodies(bodies, problem)
 plot_elements(bodies, problem)
 # plot_energy(problem)
 # plot_momentum(problem)
 # plot_cm(problem)
 # plot_time_step(problem)
 # plot_angular_momentum(problem)
-
+#
 # freq = 500
-# dur = 1000
+# dur = 2000
 # winsound.Beep(freq, dur)
 
 # plot_all(problem, bodies)
