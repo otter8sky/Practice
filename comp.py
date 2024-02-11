@@ -101,7 +101,7 @@ def comp(problem, bodies):
             for i in range(len(bodies)):
                 # FIXME: change velocities into correct ones in Leap-Frog
                 bodies[i].half_vel = add(bodies[i].vel, mult(bodies[i].acs, time_step / 2))
-        time_step = get_time_step(bodies, time_step, problem)
+        # time_step = get_time_step(bodies, time_step, problem)
         timestep.append(time_step)
         result = problem.method(bodies, time_step)
 
@@ -195,6 +195,316 @@ def comp(problem, bodies):
 
         df_i = pd.concat([time, a_i, e_i, i_i, long_of_asc_node_i, arg_of_periapsis_i], axis=1)
         df_i.to_csv(Path(Path.cwd(), "data", "data out", "elements", f"elements of {bodies[i].name}.txt"), sep="\t")
+
+def get_data_stability_of_method(bodies, problem, list_of_time_step):
+    t = 0
+    time_step = 1e-6
+
+    x_ideal = []
+    y_ideal = []
+    z_ideal = []
+
+    vx_ideal = []
+    vy_ideal = []
+    vz_ideal = []
+
+    a_ideal = []
+    e_ideal = []
+    i_ideal = []
+    l_ideal = []
+    p_ideal = []
+
+    while t <= problem.time_end:
+        print("computing ideal:", round(t * 100 / problem.time_end, 2), "%")
+        if t == 0 and problem.method == By_Leap_Frog:
+            for i in range(len(bodies)):
+                bodies[i].half_vel = add(bodies[i].vel, mult(bodies[i].acs, time_step / 2))
+        problem.method(bodies, time_step)
+        t += time_step
+
+    for i in range(len(bodies)):
+        x_ideal.append(abs(bodies[i].coord[0]))
+        y_ideal.append(abs(bodies[i].coord[1]))
+        z_ideal.append(abs(bodies[i].coord[2]))
+
+        vx_ideal.append(abs(bodies[i].vel[0]))
+        vy_ideal.append(abs(bodies[i].vel[1]))
+        vz_ideal.append(abs(bodies[i].vel[2]))
+
+        a_ideal.append(abs(major_axis(bodies, i)))
+        e_ideal.append(abs(eccentricity(bodies, i)))
+        i_ideal.append(abs(inclination(bodies, i)))
+
+        l_ideal.append(abs(longitude_of_asc_node(bodies, i)))
+        p_ideal.append(abs(arg_of_periapsis(bodies, i)))
+
+    en_ideal = abs(get_Energy(bodies))
+    an_ideal_x = abs(get_total_angular_momentum(bodies)[0])
+    an_ideal_y = abs(get_total_angular_momentum(bodies)[1])
+    an_ideal_z = abs(get_total_angular_momentum(bodies)[2])
+
+    x_ideal = pd.Series(x_ideal).to_frame(name="x_ideal, a.u.")
+    y_ideal = pd.Series(y_ideal).to_frame(name="y_ideal, a.u.")
+    z_ideal = pd.Series(z_ideal).to_frame(name="z_ideal, a.u.")
+
+    vx_ideal = pd.Series(vx_ideal).to_frame(name="vx_ideal, a.u./year")
+    vy_ideal = pd.Series(vy_ideal).to_frame(name="vy_ideal, a.u./year")
+    vz_ideal = pd.Series(vz_ideal).to_frame(name="vz_ideal, a.u./year")
+
+    a_ideal = pd.Series(a_ideal).to_frame(name="a_ideal, a.u.")
+    e_ideal = pd.Series(e_ideal).to_frame(name="e_ideal")
+    i_ideal = pd.Series(i_ideal).to_frame(name="i_ideal, degrees")
+    l_ideal = pd.Series(l_ideal).to_frame(name="l_ideal, degrees")
+    p_ideal = pd.Series(p_ideal).to_frame(name="p_ideal, degrees")
+
+    an_ideal_x = pd.Series(an_ideal_x).to_frame(name="an_ideal_x")
+    an_ideal_y = pd.Series(an_ideal_y).to_frame(name="an_ideal_y")
+    an_ideal_z = pd.Series(an_ideal_z).to_frame(name="an_ideal_z")
+
+    en_ideal = pd.Series(en_ideal).to_frame(name="en_ideal")
+
+    df_ts = pd.concat([x_ideal, y_ideal, z_ideal,
+                       vx_ideal, vy_ideal, vz_ideal,
+                       a_ideal, e_ideal, i_ideal,
+                       l_ideal, p_ideal, en_ideal,
+                       an_ideal_x, an_ideal_y, an_ideal_z], axis=1)
+    df_ts.to_csv(Path(Path.cwd(), "data", "stability", "ideal.txt"), sep="\t")
+
+    delta_x = []
+    delta_y = []
+    delta_z = []
+    delta_vx = []
+    delta_vy = []
+    delta_vz = []
+    delta_a = []
+    delta_e = []
+    delta_i = []
+    delta_l = []
+    delta_p = []
+
+    for time_step in list_of_time_step:
+        t = 0
+        while t <= problem.time_end:
+            print(f"comp ts {list_of_time_step.index(time_step)+1}:", round(t * 100 / problem.time_end, 2), "%")
+            if t == 0 and problem.method == By_Leap_Frog:
+                for i in range(len(bodies)):
+                    bodies[i].half_vel = add(bodies[i].vel, mult(bodies[i].acs, time_step / 2))
+            problem.method(bodies, time_step)
+            t += time_step
+
+        for i in range(len(bodies)):
+            delta_x[i].append(abs(abs(bodies[i].coord[0]) - x_ideal[i]))
+            delta_y[i].append(abs(abs(bodies[i].coord[1]) - y_ideal[i]))
+            delta_z[i].append(abs(abs(bodies[i].coord[2]) - z_ideal[i]))
+
+            delta_vx[i].append(abs(abs(bodies[i].vel[0]) - vx_ideal[i]))
+            delta_vy[i].append(abs(abs(bodies[i].vel[1]) - vy_ideal[i]))
+            delta_vz[i].append(abs(abs(bodies[i].vel[2]) - vz_ideal[i]))
+
+            delta_a[i].append(abs(abs(major_axis(bodies, i)) - a_ideal[i]))
+            delta_e[i].append(abs(abs(eccentricity(bodies, i)) - e_ideal[i]))
+            delta_i[i].append(abs(abs(inclination(bodies, i)) - i_ideal[i]))
+
+            delta_l[i].append(abs(abs(longitude_of_asc_node(bodies, i)) - l_ideal[i]))
+            delta_p[i].append(abs(abs(arg_of_periapsis(bodies, i)) - p_ideal[i]))
+
+        delta_en = abs(abs(get_Energy(bodies)) - en_ideal)
+        delta_an_x = abs(abs(get_total_angular_momentum(bodies)[0]) - an_ideal_x)
+        delta_an_y = abs(abs(get_total_angular_momentum(bodies)[1]) - an_ideal_y)
+        delta_an_z = abs(abs(get_total_angular_momentum(bodies)[2]) - an_ideal_z)
+
+    delta_x = pd.Series(delta_x).to_frame(name="delta_x, a.u.")
+    delta_y = pd.Series(delta_y).to_frame(name="delta_y, a.u.")
+    delta_z = pd.Series(delta_z).to_frame(name="delta_z, a.u.")
+
+    delta_vx = pd.Series(delta_vx).to_frame(name="delta_vx, a.u./year")
+    delta_vy = pd.Series(delta_vy).to_frame(name="delta_vy, a.u./year")
+    delta_vz = pd.Series(delta_vz).to_frame(name="delta_vz, a.u./year")
+
+    delta_a = pd.Series(delta_a).to_frame(name="delta_a, a.u.")
+    delta_e = pd.Series(delta_e).to_frame(name="delta_e")
+    delta_i = pd.Series(delta_i).to_frame(name="delta_i, degrees")
+    delta_l = pd.Series(delta_l).to_frame(name="delta_l, degrees")
+    delta_p = pd.Series(delta_p).to_frame(name="delta_p, degrees")
+
+    delta_an_x = pd.Series(delta_an_x).to_frame(name="delta_an_x")
+    delta_an_y = pd.Series(delta_an_y).to_frame(name="delta_an_y")
+    delta_an_z = pd.Series(delta_an_z).to_frame(name="delta_an_z")
+
+    delta_en = pd.Series(delta_en).to_frame(name="delta_en")
+
+    df_ts = pd.concat([delta_x, delta_y, delta_z,
+                       delta_vx, delta_vy, delta_vz,
+                       delta_a, delta_e, delta_i,
+                       delta_l, delta_p, delta_en,
+                       delta_an_x, delta_an_y, delta_an_z], axis=1)
+    df_ts.to_csv(Path(Path.cwd(), "data", "stability", "data_stability.txt"), sep="\t")
+def plot_stability_of_method(bodies, problem, list_of_time_step):
+
+    df_data = pd.read_csv(Path(Path.cwd(), "data", "stability", "data_stability"), header=0, sep="\t")
+
+    delta_x = [float(i) for i in df_data['delta_x, a.u.'].tolist()]
+    delta_y = [float(i) for i in df_data['delta_y, a.u.'].tolist()]
+    delta_z = [float(i) for i in df_data['delta_z, a.u.'].tolist()]
+
+    delta_vx = [float(i) for i in df_data['delta_vx, a.u./year'].tolist()]
+    delta_vy = [float(i) for i in df_data['delta_vy, a.u./year'].tolist()]
+    delta_vz = [float(i) for i in df_data['delta_vz, a.u./year'].tolist()]
+
+    delta_a = [float(i) for i in df_data['delta_a, a.u.'].tolist()]
+    delta_e = [float(i) for i in df_data['delta_e'].tolist()]
+    delta_i = [float(i) for i in df_data['delta_i, degrees'].tolist()]
+
+    delta_l = [float(i) for i in df_data['delta_l, degrees'].tolist()]
+    delta_p = [float(i) for i in df_data['delta_p, degrees'].tolist()]
+
+    delta_an_x = [float(i) for i in df_data['delta_an_x'].tolist()][0]
+    delta_an_y = [float(i) for i in df_data['delta_an_y'].tolist()][0]
+    delta_an_z = [float(i) for i in df_data['delta_an_z'].tolist()][0]
+
+    delta_en = float(df_data['delta_en'].tolist()[0])
+
+    plt.figure()
+    for i in range(len(bodies)):
+        plt.plot(delta_x[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
+    plt.title(f"{problem.method.__name__}, X", fontsize=20, color="black")
+    plt.xlabel('time step, years')
+    plt.ylabel('delta X, a.u.')
+    plt.legend(loc='best')
+    plt.savefig(Path(Path.cwd(), "data", "stability",
+                     f"{problem.method.__name__}", f"delta_x_{problem.method.__name__}.jpg"))
+
+    plt.figure()
+    for i in range(len(bodies)):
+        plt.plot(delta_y[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
+    plt.title(f"{problem.method.__name__}, Y", fontsize=20, color="black")
+    plt.xlabel('time step, years')
+    plt.ylabel('delta Y, a.u.')
+    plt.legend(loc='best')
+    plt.savefig(Path(Path.cwd(), "data", "stability",
+                     f"{problem.method.__name__}", f"delta_y_{problem.method.__name__}.jpg"))
+
+    plt.figure()
+    for i in range(len(bodies)):
+        plt.plot(delta_z[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
+    plt.title(f"{problem.method.__name__}, Z", fontsize=20, color="black")
+    plt.xlabel('time step, years')
+    plt.ylabel('delta Z, a.u.')
+    plt.legend(loc='best')
+    plt.savefig(Path(Path.cwd(), "data", "stability",
+                     f"{problem.method.__name__}", f"delta_z_{problem.method.__name__}.jpg"))
+
+    plt.figure()
+    for i in range(len(bodies)):
+        plt.plot(delta_vx[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
+    plt.title(f"{problem.method.__name__},V_x", fontsize=20, color="black")
+    plt.xlabel('time step, years')
+    plt.ylabel('delta V_x, a.u./year')
+    plt.legend(loc='best')
+    plt.savefig(Path(Path.cwd(), "data", "stability",
+                     f"{problem.method.__name__}", f"delta_Vx_{problem.method.__name__}.jpg"))
+
+    plt.figure()
+    for i in range(len(bodies)):
+        plt.plot(delta_vy[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
+    plt.title(f"{problem.method.__name__},V_y", fontsize=20, color="black")
+    plt.xlabel('time step, years')
+    plt.ylabel('delta V_y, a.u./year')
+    plt.legend(loc='best')
+    plt.savefig(Path(Path.cwd(), "data", "stability",
+                     f"{problem.method.__name__}", f"delta_Vy_{problem.method.__name__}.jpg"))
+
+    plt.figure()
+    for i in range(len(bodies)):
+        plt.plot(delta_vz[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
+    plt.title(f"{problem.method.__name__},V_z", fontsize=20, color="black")
+    plt.xlabel('time step, years')
+    plt.ylabel('delta V_z, a.u./year')
+    plt.legend(loc='best')
+    plt.savefig(Path(Path.cwd(), "data", "stability",
+                     f"{problem.method.__name__}", f"delta_Vz_{problem.method.__name__}.jpg"))
+
+    plt.figure()
+    for i in range(len(bodies)):
+        plt.plot(delta_a[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
+    plt.title(f"{problem.method.__name__}, a", fontsize=20, color="black")
+    plt.xlabel('time step, years')
+    plt.ylabel('delta axis, a.u.')
+    plt.legend(loc='best')
+    plt.savefig(Path(Path.cwd(), "data", "stability",
+                     f"{problem.method.__name__}", f"delta_a_{problem.method.__name__}.jpg"))
+
+    plt.figure()
+    for i in range(len(bodies)):
+        plt.plot(delta_e[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
+    plt.title(f"{problem.method.__name__}, e", fontsize=20, color="black")
+    plt.xlabel('time step, years')
+    plt.ylabel('delta ecc')
+    plt.legend(loc='best')
+    plt.savefig(Path(Path.cwd(), "data", "stability",
+                     f"{problem.method.__name__}", f"delta_e_{problem.method.__name__}.jpg"))
+
+    plt.figure()
+    for i in range(len(bodies)):
+        plt.plot(delta_i[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
+    plt.title(f"{problem.method.__name__}, i", fontsize=20, color="black")
+    plt.xlabel('time step, years')
+    plt.ylabel('delta inc, degrees')
+    plt.legend(loc='best')
+    plt.savefig(Path(Path.cwd(), "data", "stability",
+                     f"{problem.method.__name__}", f"delta_i_{problem.method.__name__}.jpg"))
+
+    plt.figure()
+    for i in range(len(bodies)):
+        plt.plot(delta_l[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
+    plt.title(f"{problem.method.__name__}, longitude", fontsize=20, color="black")
+    plt.xlabel('time step, years')
+    plt.ylabel('delta longitude, degrees')
+    plt.legend(loc='best')
+    plt.savefig(Path(Path.cwd(), "data", "stability",
+                     f"{problem.method.__name__}", f"delta_l_{problem.method.__name__}.jpg"))
+
+    plt.figure()
+    for i in range(len(bodies)):
+        plt.plot(delta_p[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
+    plt.title(f"{problem.method.__name__}, arg_per", fontsize=20, color="black")
+    plt.xlabel('time step, years')
+    plt.ylabel('delta arg_per, degrees')
+    plt.legend(loc='best')
+    plt.savefig(Path(Path.cwd(), "data", "stability",
+                     f"{problem.method.__name__}", f"delta_p_{problem.method.__name__}.jpg"))
+
+    plt.figure()
+    plt.plot(delta_en, list_of_time_step, color="red")
+    plt.title(f"{problem.method.__name__}, energy", fontsize=20, color="black")
+    plt.xlabel('time step, years')
+    plt.ylabel('delta energy')
+    plt.savefig(Path(Path.cwd(), "data", "stability",
+                     f"{problem.method.__name__}", f"delta_en_{problem.method.__name__}.jpg"))
+
+    plt.figure()
+    plt.plot(delta_an_x, list_of_time_step, color="purple")
+    plt.title(f"{problem.method.__name__}, ang_mom_x", fontsize=20, color="black")
+    plt.xlabel('time step, years')
+    plt.ylabel('delta ang_mom_x')
+    plt.savefig(Path(Path.cwd(), "data", "stability",
+                     f"{problem.method.__name__}", f"delta_an_x_{problem.method.__name__}.jpg"))
+
+    plt.figure()
+    plt.plot(delta_an_y, list_of_time_step, color="purple")
+    plt.title(f"{problem.method.__name__}, ang_mom_y", fontsize=20, color="black")
+    plt.xlabel('time step, years')
+    plt.ylabel('delta ang_mom_y')
+    plt.savefig(Path(Path.cwd(), "data", "stability",
+                     f"{problem.method.__name__}", f"delta_an_y_{problem.method.__name__}.jpg"))
+
+    plt.figure()
+    plt.plot(delta_an_z, list_of_time_step, color="purple")
+    plt.title(f"{problem.method.__name__}, ang_mom_z", fontsize=20, color="black")
+    plt.xlabel('time step, years')
+    plt.ylabel('delta ang_mom_z')
+    plt.savefig(Path(Path.cwd(), "data", "stability",
+                     f"{problem.method.__name__}", f"delta_an_z_{problem.method.__name__}.jpg"))
 
 def plot_bodies(bodies, problem):
     fig = plt.figure()
