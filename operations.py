@@ -13,8 +13,10 @@ class Body:
         self.color = color
         # self.radius = radius
 class Problem:
-    def __init__(self, method, time_end, initial_timestep, delta_vel,
-                 delta_coord, delta_timestep, timestep_max, timestep_min, dt_output):
+    def __init__(self, method, time_end, initial_timestep,
+                 delta_vel, delta_coord, delta_timestep,
+                 timestep_max, timestep_min,
+                 dt_output):
         self.method = method
         self.time_end = time_end
         self.initial_timestep = initial_timestep
@@ -301,31 +303,22 @@ def clear_all_datafiles(bodies):
     f.close()
 def print_ex_time(execution_time):
     if 3600 > execution_time > 60:
-        print(f"Время выполнения программы: {round(execution_time / 60, 1)} минут")
+        print("\n" + f"Время выполнения программы: {round(execution_time / 60, 1)} минут")
     elif execution_time < 60:
-        print(f"Время выполнения программы: {round(execution_time, 1)} секунд")
+        print("\n" + f"Время выполнения программы: {round(execution_time, 1)} секунд")
     else:
-        print(f"Время выполнения программы: {round(execution_time / 3600, 1)} часов")
+        print("\n" + f"Время выполнения программы: {round(execution_time / 3600, 1)} часов")
 def get_method(method_name, methods, methods_names):
     for i in range(len(methods_names)):
         if method_name == methods_names[i]:
-            return methods[i]
+            return [methods[i]]
+    return [methods[-1], int(method_name[-1])]
 
 def max_mass(bodies):
     masses = []
     for body in bodies:
         masses.append(body.mass)
     return max(masses), masses.index(max(masses))
-
-# def check_collision(bodies, i):
-#     collided_bodies = []
-#     for i in range(len(bodies)):
-#         for j in range(len(bodies)):
-#             if get_mag(get_r(bodies[i].coord, bodies[j].coord)) <= bodies[i].radius + bodies[j].radius:
-#                 m_max, i_max_mass = max_mass([bodies[i], bodies[j]])
-#                 bodies[\\\].vel = mult(add(mult(bodies[i].vel, bodies[i].mass),
-#                                                   mult(bodies[j].vel, bodies[j].mass)),
-#                                               bodies[i].mass + bodies[j].mass)[:]
 
 def major_axis(bodies, i):
     max_m, i_max_mass = max_mass(bodies)
@@ -415,11 +408,10 @@ def arg_of_periapsis(bodies, i):
         inc = inclination(bodies, i)
         z = get_r(bodies[i].coord, bodies[i_max_mass].coord)[2]
         r = get_mag(get_r(bodies[i].coord, bodies[i_max_mass].coord))
-        u = np.arcsin(z / (np.sin(inc) * r))
+        u = np.arcsin(z / (np.sin(inc * np.pi / 180) * r))
 
         g = (u - true_anomaly(bodies, i)) * 180 / np.pi
-
-        g = np.arctan2(np.tan(g / 180 * np.pi), 1) * 180 / np.pi
+        g = g % 360
         return g
 
 def get_kepler_elements(bodies, i):
@@ -495,3 +487,4 @@ def get_middle_anomaly_for_all(bodies):
     for i in range(len(bodies)):
         middle_anomaly_all.append(middle_anomaly(bodies, i))
     return middle_anomaly_all
+

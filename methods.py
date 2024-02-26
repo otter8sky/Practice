@@ -97,8 +97,10 @@ def By_Leap_Frog(bodies, time_step):
     return result
 
 
-def By_RK_N(bodies, time_step):
+def By_RK_N(bodies, time_step, N):
     k_list = []
+    a_list = a_lists[N-1]
+    b_list = b_lists[N-1]
     for i in range(len(b_list)):
         k_list.append(get_k(copy(bodies), a_list[i], k_list, time_step))
     result = get_k(copy(bodies), b_list, k_list, time_step)

@@ -2,12 +2,48 @@ from operations import *
 from methods import methods
 from methods import methods_names
 from methods import By_Leap_Frog
+from methods import By_RK_N
 import pandas as pd
 from pathlib import Path
 import os
 import re
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
+
+
+def descartes_from_kepler(name, bodies, r, v, i, omega, big_omega, q, mass, color):
+    a_inv = (2 / r - v ** 2 / G)
+    a = 1 / a_inv
+    e = 1 - q * a_inv
+    p = 1 / a_inv * (1 - e ** 2)
+    f = 2 * np.pi - np.arccos((p - r) / (e * r))
+
+    r_dot = np.sqrt(G * M_sun / p) * e * np.sin(f)
+    r_f_dot = np.sqrt(G * M_sun / p) * (1 + e * np.cos(f))
+
+    alpha = np.cos(big_omega) * np.cos(f + omega) - np.sin(big_omega) * np.sin(f + omega) * np.cos(i)
+    betta = np.sin(big_omega) * np.cos(f + omega) - np.cos(big_omega) * np.sin(f + omega) * np.cos(i)
+    gamma = np.sin(f + omega) * np.sin(i)
+
+    alpha_stroke = - np.cos(big_omega) * np.sin(f + omega) - np.sin(big_omega) * np.cos(f + omega) * np.cos(i)
+    betta_stroke = - np.sin(big_omega) * np.sin(f + omega) - np.cos(big_omega) * np.cos(f + omega) * np.cos(i)
+    gamma_stroke = np.cos(f + omega) * np.sin(i)
+
+    x = r * alpha
+    y = r * betta
+    z = r * gamma
+
+    v_x = r_dot * alpha + r_f_dot * alpha_stroke
+    v_y = r_dot * betta + r_f_dot * betta_stroke
+    v_z = r_dot * gamma + r_f_dot * gamma_stroke
+
+    bodies.append(Body([v_x, v_y, v_z],
+                       [v_x, v_y, v_z],
+                       [x, y, z],
+                       float(mass), [0, 0, 0], name, color))
+
+    return bodies
+
 
 def read_comp_file(file_name):
     df_data = pd.read_csv(Path(Path.cwd(), "data", "initial data", f"{file_name}"), header=0, sep="\t")
@@ -23,6 +59,8 @@ def read_comp_file(file_name):
     problem = Problem(get_method(method, methods, methods_names), time_end, initial_timestep, delta_vel,
                       delta_coord, delta_timestep, timestep_max, timestep_min, dt_output)
     return problem
+
+
 def read_data_file():
     bodies = []
     for f in os.listdir(Path(Path.cwd(), "data", "initial data", "coordinates")):
@@ -32,7 +70,6 @@ def read_data_file():
         match = re.search(r'Object *: *\w+', file)
         if match:
             name_i = re.split(r' *: *', match[0])[1]
-            print(name_i)
         else:
             print("Pattern not found")
 
@@ -56,12 +93,15 @@ def read_data_file():
                            [vx_i, vy_i, vz_i],
                            [x_i, y_i, z_i],
                            float(mass_i), [0, 0, 0], name_i, color_i))
-        print("OK")
-    print(bodies[-1])
     bodies = get_acs_for_all(bodies)
     return bodies
+
+
 def comp(problem, bodies):
-    cnt = 0
+    if str(problem.method[0].__name__) == "By_RK_N":
+        method_name = "By_RK_" + str(problem.method[1])
+    else:
+        method_name = problem.method[0].__name__
     t = 0
     time_step = problem.initial_timestep
     timestep = [time_step]
@@ -94,19 +134,20 @@ def comp(problem, bodies):
 
     next_output = problem.dt_output
 
-    while t <= problem.time_end:
-        print(round(t * 100/problem.time_end, 2), "%")
+    while t < problem.time_end:
+        print("\r" + str(round(t * 100 / problem.time_end, 2)) + "%", end="")
+        # print(round(t * 100 / problem.time_end, 2), "%")
         time_full.append(t)
-        if t == 0 and problem.method == By_Leap_Frog:
+        if t == 0 and problem.method[0] == By_Leap_Frog:
             for i in range(len(bodies)):
-                # FIXME: change velocities into correct ones in Leap-Frog
                 bodies[i].half_vel = add(bodies[i].vel, mult(bodies[i].acs, time_step / 2))
-        # time_step = get_time_step(bodies, time_step, problem)
-        timestep.append(time_step)
-        result = problem.method(bodies, time_step)
 
-        if abs(t - next_output) <= problem.dt_output:
-            cnt += 1
+        if problem.method[0] == By_RK_N:
+            result = problem.method[0](bodies, time_step, problem.method[1])
+        else:
+            result = problem.method[0](bodies, time_step)
+
+        if abs(t - next_output) < time_step / 2 and abs(t - problem.time_end) > time_step / 2:
             for i in range(len(bodies)):
                 bodies_coord[i] = fill_coord_list_3d(bodies_coord[i], bodies[i])[:]
                 bodies_vel[i] = fill_vel_list_3d(bodies_vel[i], bodies[i])[:]
@@ -116,7 +157,7 @@ def comp(problem, bodies):
                 bodies_inc[i].append(inclination(bodies, i))
                 bodies_long[i].append(longitude_of_asc_node(bodies, i))
                 bodies_per[i].append(arg_of_periapsis(bodies, i))
-
+            timestep.append(time_step)
             cm_coord = fill_list_3d_func(cm_coord, get_coord_cm, bodies)[:]
             mom_coord = fill_list_3d_func(mom_coord, get_total_momentum, bodies)[:]
             mag_mom.append(get_mag(get_total_momentum(bodies)))
@@ -126,7 +167,10 @@ def comp(problem, bodies):
             energy.append(get_Energy(result))
 
             next_output += problem.dt_output
-        t += time_step
+        if not abs(problem.time_end - t) <= 1e-6:
+            t += time_step
+        else:
+            break
 
     for i in range(len(bodies)):
         bodies_coord[i] = fill_coord_list_3d(bodies_coord[i], bodies[i])[:]
@@ -146,57 +190,53 @@ def comp(problem, bodies):
     time.append(t)
     energy.append(get_Energy(bodies))
 
-    time_full = pd.Series(time_full).to_frame(name="time, years")
     time = pd.Series(time).to_frame(name="time, years")
     timestep = pd.Series(timestep).to_frame(name="time step, years")
-    df_ts = pd.concat([time, timestep, time_full], axis=1)
-    df_ts.to_csv(Path(Path.cwd(), "data", "data out", "time_step.txt"), sep="\t")
 
     energy = pd.Series(energy).to_frame(name="energy")
-    df_en = pd.concat([time, energy], axis=1)
-    df_en.to_csv(Path(Path.cwd(), "data", "data out", "energy.txt"), sep="\t")
 
     cm_x = pd.Series(cm_coord[0]).to_frame(name="cm_x, a.u.")
     cm_y = pd.Series(cm_coord[1]).to_frame(name="cm_y, a.u.")
     cm_z = pd.Series(cm_coord[2]).to_frame(name="cm_z, a.u.")
-    df_cm = pd.concat([time, cm_x, cm_y, cm_z], axis=1)
-    df_cm.to_csv(Path(Path.cwd(), "data", "data out", "center_mass.txt"), sep="\t")
 
     mom_x = pd.Series(mom_coord[0]).to_frame(name="momentum_x")
     mom_y = pd.Series(mom_coord[1]).to_frame(name="momentum_y")
     mom_z = pd.Series(mom_coord[2]).to_frame(name="momentum_z")
     mag_mom = pd.Series(mag_mom).to_frame(name="momentum_mag")
-    df_mom = pd.concat([time, mom_x, mom_y, mom_z, mag_mom], axis=1)
-    df_mom.to_csv(Path(Path.cwd(), "data", "data out", "momentum.txt"), sep="\t")
 
     ang_mom_x = pd.Series(ang_mom_coord[0]).to_frame(name="angular_momentum_x")
     ang_mom_y = pd.Series(ang_mom_coord[1]).to_frame(name="angular_momentum_y")
     ang_mom_z = pd.Series(ang_mom_coord[2]).to_frame(name="angular_momentum_z")
     ang_mag_mom = pd.Series(mag_ang_mom).to_frame(name="angular_momentum_mag")
-    df_ang_mom = pd.concat([time, ang_mom_x, ang_mom_y, ang_mom_z, ang_mag_mom], axis=1)
-    df_ang_mom.to_csv(Path(Path.cwd(), "data", "data out", "angular momentum.txt"), sep="\t")
+    df = pd.concat([time, timestep, energy, cm_x, cm_y, cm_z, mom_x, mom_y, mom_z, mag_mom,
+                    ang_mom_x, ang_mom_y, ang_mom_z, ang_mag_mom], axis=1)
+    df.to_csv(Path(Path.cwd(), "data", "data out", "general data", f"{method_name}_general_{time_step}.txt"), sep="\t")
 
     for i in range(len(bodies)):
         x_i = pd.Series(bodies_coord[i][0]).to_frame(name="X, a.u.")
         y_i = pd.Series(bodies_coord[i][1]).to_frame(name="Y, a.u.")
         z_i = pd.Series(bodies_coord[i][2]).to_frame(name="Z, a.u.")
-        vel_x_i = pd.Series(bodies_vel[i][0]).to_frame(name="V_x, years")
+        vel_x_i = pd.Series(bodies_vel[i][0]).to_frame(name="V_x, a.u./year")
         vel_y_i = pd.Series(bodies_vel[i][1]).to_frame(name="V_y, a.u./year")
         vel_z_i = pd.Series(bodies_vel[i][2]).to_frame(name="V_z, a.u./year")
-
-        df_i = pd.concat([time, x_i, y_i, z_i, vel_x_i, vel_y_i, vel_z_i], axis=1)
-        df_i.to_csv(Path(Path.cwd(), "data", "data out", "objects", f"{bodies[i].name}.txt"), sep="\t")
 
         a_i = pd.Series(bodies_axis[i]).to_frame(name="a, a.u.")
         e_i = pd.Series(bodies_ecc[i]).to_frame(name="e")
         i_i = pd.Series(bodies_inc[i]).to_frame(name="i, degrees")
         long_of_asc_node_i = pd.Series(bodies_long[i]).to_frame(name="long_of_asc_node, degrees")
         arg_of_periapsis_i = pd.Series(bodies_per[i]).to_frame(name="arg_of_periapsis, degrees")
+        # f"{method_name}",
+        df_i = pd.concat([time, x_i, y_i, z_i, vel_x_i, vel_y_i, vel_z_i, a_i, e_i, i_i,
+                          long_of_asc_node_i, arg_of_periapsis_i], axis=1)
+        df_i.to_csv(Path(Path.cwd(), "data", "data out", "objects",
+                         f"{bodies[i].name}_{problem.initial_timestep}.txt"), sep="\t")
 
-        df_i = pd.concat([time, a_i, e_i, i_i, long_of_asc_node_i, arg_of_periapsis_i], axis=1)
-        df_i.to_csv(Path(Path.cwd(), "data", "data out", "elements", f"elements of {bodies[i].name}.txt"), sep="\t")
 
-def get_data_stability_of_method(bodies, problem, list_of_time_step):
+def get_ideal_data_stability_of_method(bodies, problem):
+    if str(problem.method[0].__name__) == "By_RK_N":
+        method_name = "By_RK_" + str(problem.method[1])
+    else:
+        method_name = problem.method[0].__name__
     t = 0
     time_step = 1e-6
 
@@ -216,32 +256,38 @@ def get_data_stability_of_method(bodies, problem, list_of_time_step):
 
     while t <= problem.time_end:
         print("computing ideal:", round(t * 100 / problem.time_end, 2), "%")
-        if t == 0 and problem.method == By_Leap_Frog:
+        if t == 0 and problem.method[0] == By_Leap_Frog:
             for i in range(len(bodies)):
                 bodies[i].half_vel = add(bodies[i].vel, mult(bodies[i].acs, time_step / 2))
-        problem.method(bodies, time_step)
-        t += time_step
+        if problem.method[0] == By_RK_N:
+            problem.method[0](bodies, time_step, problem.method[1])
+        else:
+            problem.method[0](bodies, time_step)
+        if not abs(problem.time_end - t) <= 1e-6:
+            t += time_step
+        else:
+            break
 
     for i in range(len(bodies)):
-        x_ideal.append(abs(bodies[i].coord[0]))
-        y_ideal.append(abs(bodies[i].coord[1]))
-        z_ideal.append(abs(bodies[i].coord[2]))
+        x_ideal.append(bodies[i].coord[0])
+        y_ideal.append(bodies[i].coord[1])
+        z_ideal.append(bodies[i].coord[2])
 
-        vx_ideal.append(abs(bodies[i].vel[0]))
-        vy_ideal.append(abs(bodies[i].vel[1]))
-        vz_ideal.append(abs(bodies[i].vel[2]))
+        vx_ideal.append(bodies[i].vel[0])
+        vy_ideal.append(bodies[i].vel[1])
+        vz_ideal.append(bodies[i].vel[2])
 
-        a_ideal.append(abs(major_axis(bodies, i)))
-        e_ideal.append(abs(eccentricity(bodies, i)))
-        i_ideal.append(abs(inclination(bodies, i)))
+        a_ideal.append(major_axis(bodies, i))
+        e_ideal.append(eccentricity(bodies, i))
+        i_ideal.append(inclination(bodies, i))
 
-        l_ideal.append(abs(longitude_of_asc_node(bodies, i)))
-        p_ideal.append(abs(arg_of_periapsis(bodies, i)))
+        l_ideal.append(longitude_of_asc_node(bodies, i))
+        p_ideal.append(arg_of_periapsis(bodies, i))
 
-    en_ideal = abs(get_Energy(bodies))
-    an_ideal_x = abs(get_total_angular_momentum(bodies)[0])
-    an_ideal_y = abs(get_total_angular_momentum(bodies)[1])
-    an_ideal_z = abs(get_total_angular_momentum(bodies)[2])
+    en_ideal = get_Energy(bodies)
+    an_ideal_x = get_total_angular_momentum(bodies)[0]
+    an_ideal_y = get_total_angular_momentum(bodies)[1]
+    an_ideal_z = get_total_angular_momentum(bodies)[2]
 
     x_ideal = pd.Series(x_ideal).to_frame(name="x_ideal, a.u.")
     y_ideal = pd.Series(y_ideal).to_frame(name="y_ideal, a.u.")
@@ -268,463 +314,159 @@ def get_data_stability_of_method(bodies, problem, list_of_time_step):
                        a_ideal, e_ideal, i_ideal,
                        l_ideal, p_ideal, en_ideal,
                        an_ideal_x, an_ideal_y, an_ideal_z], axis=1)
-    df_ts.to_csv(Path(Path.cwd(), "data", "stability", "ideal.txt"), sep="\t")
+    df_ts.to_csv(Path(Path.cwd(), "data", "stability", "ideal_data", f"{method_name}",
+                      "ideal.txt"), sep="\t")
 
-    delta_x = []
-    delta_y = []
-    delta_z = []
-    delta_vx = []
-    delta_vy = []
-    delta_vz = []
-    delta_a = []
-    delta_e = []
-    delta_i = []
-    delta_l = []
-    delta_p = []
+
+def get_data_stability_of_method(bodies, problem, list_of_time_step):
+    if str(problem.method[0].__name__) == "By_RK_N":
+        method_name = "By_RK_" + str(problem.method[1])
+    else:
+        method_name = problem.method[0].__name__
+    df_data = pd.read_csv(Path(Path.cwd(), "data", "stability", "ideal_data",
+                               f"{method_name}", "ideal.txt"), header=0, sep="\t")
+
+    x_ideal = [float(i) for i in df_data['x_ideal, a.u.'].tolist()]
+    y_ideal = [float(i) for i in df_data['y_ideal, a.u.'].tolist()]
+    z_ideal = [float(i) for i in df_data['z_ideal, a.u.'].tolist()]
+
+    vx_ideal = [float(i) for i in df_data['vx_ideal, a.u./year'].tolist()]
+    vy_ideal = [float(i) for i in df_data['vy_ideal, a.u./year'].tolist()]
+    vz_ideal = [float(i) for i in df_data['vz_ideal, a.u./year'].tolist()]
+
+    a_ideal = [float(i) for i in df_data['a_ideal, a.u.'].tolist()]
+    e_ideal = [float(i) for i in df_data['e_ideal'].tolist()]
+    i_ideal = [float(i) for i in df_data['i_ideal, degrees'].tolist()]
+
+    l_ideal = [float(i) for i in df_data['l_ideal, degrees'].tolist()]
+    p_ideal = [float(i) for i in df_data['p_ideal, degrees'].tolist()]
+
+    an_ideal_x = [float(i) for i in df_data['an_ideal_x'].tolist()][0]
+    an_ideal_y = [float(i) for i in df_data['an_ideal_y'].tolist()][0]
+    an_ideal_z = [float(i) for i in df_data['an_ideal_z'].tolist()][0]
+
+    en_ideal = [float(i) for i in df_data['en_ideal'].tolist()][0]
+
+    delta_x = [[] for i in range(len(bodies))]
+    delta_y = [[] for i in range(len(bodies))]
+    delta_z = [[] for i in range(len(bodies))]
+    delta_vx = [[] for i in range(len(bodies))]
+    delta_vy = [[] for i in range(len(bodies))]
+    delta_vz = [[] for i in range(len(bodies))]
+    delta_a = [[] for i in range(len(bodies))]
+    delta_e = [[] for i in range(len(bodies))]
+    delta_i = [[] for i in range(len(bodies))]
+    delta_l = [[] for i in range(len(bodies))]
+    delta_p = [[] for i in range(len(bodies))]
+
+    delta_en = []
+    delta_an_x = []
+    delta_an_y = []
+    delta_an_z = []
 
     for time_step in list_of_time_step:
-        t = 0
-        while t <= problem.time_end:
-            print(f"comp ts {list_of_time_step.index(time_step)+1}:", round(t * 100 / problem.time_end, 2), "%")
-            if t == 0 and problem.method == By_Leap_Frog:
-                for i in range(len(bodies)):
-                    bodies[i].half_vel = add(bodies[i].vel, mult(bodies[i].acs, time_step / 2))
-            problem.method(bodies, time_step)
-            t += time_step
-
         for i in range(len(bodies)):
-            delta_x[i].append(abs(abs(bodies[i].coord[0]) - x_ideal[i]))
-            delta_y[i].append(abs(abs(bodies[i].coord[1]) - y_ideal[i]))
-            delta_z[i].append(abs(abs(bodies[i].coord[2]) - z_ideal[i]))
+            df_data_i = pd.read_csv(
+                Path(Path.cwd(), "data", "data out", "objects", f"{method_name}",
+                     f"{bodies[i].name}_{time_step}.txt"), header=0, sep="\t")
+            x_i = [float(i) for i in df_data_i['X, a.u.'].tolist()]
+            y_i = [float(i) for i in df_data_i['Y, a.u.'].tolist()]
+            z_i = [float(i) for i in df_data_i['Z, a.u.'].tolist()]
 
-            delta_vx[i].append(abs(abs(bodies[i].vel[0]) - vx_ideal[i]))
-            delta_vy[i].append(abs(abs(bodies[i].vel[1]) - vy_ideal[i]))
-            delta_vz[i].append(abs(abs(bodies[i].vel[2]) - vz_ideal[i]))
+            vx_i = [float(i) for i in df_data_i['V_x, a.u./year'].tolist()]
+            vy_i = [float(i) for i in df_data_i['V_y, a.u./year'].tolist()]
+            vz_i = [float(i) for i in df_data_i['V_z, a.u./year'].tolist()]
 
-            delta_a[i].append(abs(abs(major_axis(bodies, i)) - a_ideal[i]))
-            delta_e[i].append(abs(abs(eccentricity(bodies, i)) - e_ideal[i]))
-            delta_i[i].append(abs(abs(inclination(bodies, i)) - i_ideal[i]))
+            a_i = [float(i) for i in df_data_i['a, a.u.'].tolist()]
+            e_i = [float(i) for i in df_data_i['e'].tolist()]
+            i_i = [float(i) for i in df_data_i['i, degrees'].tolist()]
+            l_i = [float(i) for i in df_data_i['long_of_asc_node, degrees'].tolist()]
+            p_i = [float(i) for i in df_data_i['arg_of_periapsis, degrees'].tolist()]
 
-            delta_l[i].append(abs(abs(longitude_of_asc_node(bodies, i)) - l_ideal[i]))
-            delta_p[i].append(abs(abs(arg_of_periapsis(bodies, i)) - p_ideal[i]))
+            delta_x[i].append(abs(x_i[-1] - x_ideal[i]))
+            delta_y[i].append(abs(y_i[-1] - y_ideal[i]))
+            delta_z[i].append(abs(z_i[-1] - z_ideal[i]))
 
-        delta_en = abs(abs(get_Energy(bodies)) - en_ideal)
-        delta_an_x = abs(abs(get_total_angular_momentum(bodies)[0]) - an_ideal_x)
-        delta_an_y = abs(abs(get_total_angular_momentum(bodies)[1]) - an_ideal_y)
-        delta_an_z = abs(abs(get_total_angular_momentum(bodies)[2]) - an_ideal_z)
+            delta_vx[i].append(abs(vx_i[-1] - vx_ideal[i]))
+            delta_vy[i].append(abs(vy_i[-1] - vy_ideal[i]))
+            delta_vz[i].append(abs(vz_i[-1] - vz_ideal[i]))
 
-    delta_x = pd.Series(delta_x).to_frame(name="delta_x, a.u.")
-    delta_y = pd.Series(delta_y).to_frame(name="delta_y, a.u.")
-    delta_z = pd.Series(delta_z).to_frame(name="delta_z, a.u.")
+            delta_a[i].append(abs(a_i[-1] - a_ideal[i]))
+            delta_e[i].append(abs(e_i[-1] - e_ideal[i]))
+            delta_i[i].append(abs(i_i[-1] - i_ideal[i]))
+            delta_l[i].append(abs(l_i[-1] - l_ideal[i]))
+            delta_p[i].append(abs(p_i[-1] - p_ideal[i]))
 
-    delta_vx = pd.Series(delta_vx).to_frame(name="delta_vx, a.u./year")
-    delta_vy = pd.Series(delta_vy).to_frame(name="delta_vy, a.u./year")
-    delta_vz = pd.Series(delta_vz).to_frame(name="delta_vz, a.u./year")
+        # df_data_general = pd.read_csv(Path(Path.cwd(), "data", "data out", "general data",
+        #                                    f"{method_name}_general_{time_step}.txt"), header=0, sep="\t")
+        #
+        # an_x_ts = [float(i) for i in df_data_general['angular_momentum_x'].tolist()]
+        # an_y_ts = [float(i) for i in df_data_general['angular_momentum_y'].tolist()]
+        # an_z_ts = [float(i) for i in df_data_general['angular_momentum_z'].tolist()]
+        # en_ts = [float(i) for i in df_data_general['energy'].tolist()]
+        #
+        # delta_en.append(abs(en_ts[-1] - en_ideal))
+        # delta_an_x.append(abs(an_x_ts[-1] - an_ideal_x))
+        # delta_an_y.append(abs(an_y_ts[-1] - an_ideal_y))
+        # delta_an_z.append(abs(an_z_ts[-1] - an_ideal_z))
+    # TODO: cделать общие дельты тоже
+    delta_object = [delta_en, delta_an_x, delta_an_y, delta_an_z]
+    delta_general = [delta_x, delta_y, delta_z,
+                     delta_vx, delta_vy, delta_vz,
+                     delta_a, delta_e, delta_i, delta_l, delta_p]
+    list_of_time_step = pd.Series(list_of_time_step).to_frame(name="time step")
+    names_of_lines = pd.Series(["x", "x", "",
+                                "y", "y", "",
+                                "z", "z", "",
+                                "vx", "vx", "",
+                                "vy", "vy", "",
+                                "vz", "vz", "",
+                                "a", "a", "",
+                                "e", "e", "",
+                                "i", "i", "",
+                                "l", "l", "",
+                                "p", "p", ""]).to_frame(name="lines")
 
-    delta_a = pd.Series(delta_a).to_frame(name="delta_a, a.u.")
-    delta_e = pd.Series(delta_e).to_frame(name="delta_e")
-    delta_i = pd.Series(delta_i).to_frame(name="delta_i, degrees")
-    delta_l = pd.Series(delta_l).to_frame(name="delta_l, degrees")
-    delta_p = pd.Series(delta_p).to_frame(name="delta_p, degrees")
+    orders = [[] for i in range(len(bodies))]
+    for i in range(len(bodies)):
+        for k in range(len(delta_object)):
+            for j in range(0, len(list_of_time_step) - 1):
+                try:
+                    orders[i].append(round(np.log10(abs(delta_object[k][i][j] / delta_object[k][i][j + 1])), 4))
+                except:
+                    orders[i].append("*")
+            orders[i].append("-------------")
+        orders[i] = pd.Series(orders[i]).to_frame(name=f"{bodies[i].name}")
+    orders.insert(0, names_of_lines)
+    df_orders = pd.concat(orders, axis=1)
+    df_orders.to_csv(Path(Path.cwd(), "data", "stability", "orders.txt"), sep="\t")
+
+    for i in range(len(bodies)):
+        delta_x_i = pd.Series(delta_x[i]).to_frame(name="delta_x, a.u.")
+        delta_y_i = pd.Series(delta_y[i]).to_frame(name="delta_y, a.u.")
+        delta_z_i = pd.Series(delta_z[i]).to_frame(name="delta_z, a.u.")
+
+        delta_vx_i = pd.Series(delta_vx[i]).to_frame(name="delta_vx, a.u./year")
+        delta_vy_i = pd.Series(delta_vy[i]).to_frame(name="delta_vy, a.u./year")
+        delta_vz_i = pd.Series(delta_vz[i]).to_frame(name="delta_vz, a.u./year")
+
+        delta_a_i = pd.Series(delta_a[i]).to_frame(name="delta_a, a.u.")
+        delta_e_i = pd.Series(delta_e[i]).to_frame(name="delta_e")
+        delta_i_i = pd.Series(delta_i[i]).to_frame(name="delta_i, degrees")
+        delta_l_i = pd.Series(delta_l[i]).to_frame(name="delta_l, degrees")
+        delta_p_i = pd.Series(delta_p[i]).to_frame(name="delta_p, degrees")
+
+        df_i = pd.concat([list_of_time_step, delta_x_i, delta_y_i, delta_z_i,
+                          delta_vx_i, delta_vy_i, delta_vz_i,
+                          delta_a_i, delta_e_i, delta_i_i, delta_l_i, delta_p_i], axis=1)
+        df_i.to_csv(Path(Path.cwd(), "data", "stability", "stability_data",
+                         f"{method_name}", f"{bodies[i].name}.txt"), sep="\t")
 
     delta_an_x = pd.Series(delta_an_x).to_frame(name="delta_an_x")
     delta_an_y = pd.Series(delta_an_y).to_frame(name="delta_an_y")
     delta_an_z = pd.Series(delta_an_z).to_frame(name="delta_an_z")
-
     delta_en = pd.Series(delta_en).to_frame(name="delta_en")
 
-    df_ts = pd.concat([delta_x, delta_y, delta_z,
-                       delta_vx, delta_vy, delta_vz,
-                       delta_a, delta_e, delta_i,
-                       delta_l, delta_p, delta_en,
-                       delta_an_x, delta_an_y, delta_an_z], axis=1)
-    df_ts.to_csv(Path(Path.cwd(), "data", "stability", "data_stability.txt"), sep="\t")
-def plot_stability_of_method(bodies, problem, list_of_time_step):
-
-    df_data = pd.read_csv(Path(Path.cwd(), "data", "stability", "data_stability"), header=0, sep="\t")
-
-    delta_x = [float(i) for i in df_data['delta_x, a.u.'].tolist()]
-    delta_y = [float(i) for i in df_data['delta_y, a.u.'].tolist()]
-    delta_z = [float(i) for i in df_data['delta_z, a.u.'].tolist()]
-
-    delta_vx = [float(i) for i in df_data['delta_vx, a.u./year'].tolist()]
-    delta_vy = [float(i) for i in df_data['delta_vy, a.u./year'].tolist()]
-    delta_vz = [float(i) for i in df_data['delta_vz, a.u./year'].tolist()]
-
-    delta_a = [float(i) for i in df_data['delta_a, a.u.'].tolist()]
-    delta_e = [float(i) for i in df_data['delta_e'].tolist()]
-    delta_i = [float(i) for i in df_data['delta_i, degrees'].tolist()]
-
-    delta_l = [float(i) for i in df_data['delta_l, degrees'].tolist()]
-    delta_p = [float(i) for i in df_data['delta_p, degrees'].tolist()]
-
-    delta_an_x = [float(i) for i in df_data['delta_an_x'].tolist()][0]
-    delta_an_y = [float(i) for i in df_data['delta_an_y'].tolist()][0]
-    delta_an_z = [float(i) for i in df_data['delta_an_z'].tolist()][0]
-
-    delta_en = float(df_data['delta_en'].tolist()[0])
-
-    plt.figure()
-    for i in range(len(bodies)):
-        plt.plot(delta_x[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
-    plt.title(f"{problem.method.__name__}, X", fontsize=20, color="black")
-    plt.xlabel('time step, years')
-    plt.ylabel('delta X, a.u.')
-    plt.legend(loc='best')
-    plt.savefig(Path(Path.cwd(), "data", "stability",
-                     f"{problem.method.__name__}", f"delta_x_{problem.method.__name__}.jpg"))
-
-    plt.figure()
-    for i in range(len(bodies)):
-        plt.plot(delta_y[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
-    plt.title(f"{problem.method.__name__}, Y", fontsize=20, color="black")
-    plt.xlabel('time step, years')
-    plt.ylabel('delta Y, a.u.')
-    plt.legend(loc='best')
-    plt.savefig(Path(Path.cwd(), "data", "stability",
-                     f"{problem.method.__name__}", f"delta_y_{problem.method.__name__}.jpg"))
-
-    plt.figure()
-    for i in range(len(bodies)):
-        plt.plot(delta_z[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
-    plt.title(f"{problem.method.__name__}, Z", fontsize=20, color="black")
-    plt.xlabel('time step, years')
-    plt.ylabel('delta Z, a.u.')
-    plt.legend(loc='best')
-    plt.savefig(Path(Path.cwd(), "data", "stability",
-                     f"{problem.method.__name__}", f"delta_z_{problem.method.__name__}.jpg"))
-
-    plt.figure()
-    for i in range(len(bodies)):
-        plt.plot(delta_vx[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
-    plt.title(f"{problem.method.__name__},V_x", fontsize=20, color="black")
-    plt.xlabel('time step, years')
-    plt.ylabel('delta V_x, a.u./year')
-    plt.legend(loc='best')
-    plt.savefig(Path(Path.cwd(), "data", "stability",
-                     f"{problem.method.__name__}", f"delta_Vx_{problem.method.__name__}.jpg"))
-
-    plt.figure()
-    for i in range(len(bodies)):
-        plt.plot(delta_vy[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
-    plt.title(f"{problem.method.__name__},V_y", fontsize=20, color="black")
-    plt.xlabel('time step, years')
-    plt.ylabel('delta V_y, a.u./year')
-    plt.legend(loc='best')
-    plt.savefig(Path(Path.cwd(), "data", "stability",
-                     f"{problem.method.__name__}", f"delta_Vy_{problem.method.__name__}.jpg"))
-
-    plt.figure()
-    for i in range(len(bodies)):
-        plt.plot(delta_vz[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
-    plt.title(f"{problem.method.__name__},V_z", fontsize=20, color="black")
-    plt.xlabel('time step, years')
-    plt.ylabel('delta V_z, a.u./year')
-    plt.legend(loc='best')
-    plt.savefig(Path(Path.cwd(), "data", "stability",
-                     f"{problem.method.__name__}", f"delta_Vz_{problem.method.__name__}.jpg"))
-
-    plt.figure()
-    for i in range(len(bodies)):
-        plt.plot(delta_a[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
-    plt.title(f"{problem.method.__name__}, a", fontsize=20, color="black")
-    plt.xlabel('time step, years')
-    plt.ylabel('delta axis, a.u.')
-    plt.legend(loc='best')
-    plt.savefig(Path(Path.cwd(), "data", "stability",
-                     f"{problem.method.__name__}", f"delta_a_{problem.method.__name__}.jpg"))
-
-    plt.figure()
-    for i in range(len(bodies)):
-        plt.plot(delta_e[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
-    plt.title(f"{problem.method.__name__}, e", fontsize=20, color="black")
-    plt.xlabel('time step, years')
-    plt.ylabel('delta ecc')
-    plt.legend(loc='best')
-    plt.savefig(Path(Path.cwd(), "data", "stability",
-                     f"{problem.method.__name__}", f"delta_e_{problem.method.__name__}.jpg"))
-
-    plt.figure()
-    for i in range(len(bodies)):
-        plt.plot(delta_i[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
-    plt.title(f"{problem.method.__name__}, i", fontsize=20, color="black")
-    plt.xlabel('time step, years')
-    plt.ylabel('delta inc, degrees')
-    plt.legend(loc='best')
-    plt.savefig(Path(Path.cwd(), "data", "stability",
-                     f"{problem.method.__name__}", f"delta_i_{problem.method.__name__}.jpg"))
-
-    plt.figure()
-    for i in range(len(bodies)):
-        plt.plot(delta_l[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
-    plt.title(f"{problem.method.__name__}, longitude", fontsize=20, color="black")
-    plt.xlabel('time step, years')
-    plt.ylabel('delta longitude, degrees')
-    plt.legend(loc='best')
-    plt.savefig(Path(Path.cwd(), "data", "stability",
-                     f"{problem.method.__name__}", f"delta_l_{problem.method.__name__}.jpg"))
-
-    plt.figure()
-    for i in range(len(bodies)):
-        plt.plot(delta_p[i], list_of_time_step, color=bodies[i].color, label=bodies[i].name)
-    plt.title(f"{problem.method.__name__}, arg_per", fontsize=20, color="black")
-    plt.xlabel('time step, years')
-    plt.ylabel('delta arg_per, degrees')
-    plt.legend(loc='best')
-    plt.savefig(Path(Path.cwd(), "data", "stability",
-                     f"{problem.method.__name__}", f"delta_p_{problem.method.__name__}.jpg"))
-
-    plt.figure()
-    plt.plot(delta_en, list_of_time_step, color="red")
-    plt.title(f"{problem.method.__name__}, energy", fontsize=20, color="black")
-    plt.xlabel('time step, years')
-    plt.ylabel('delta energy')
-    plt.savefig(Path(Path.cwd(), "data", "stability",
-                     f"{problem.method.__name__}", f"delta_en_{problem.method.__name__}.jpg"))
-
-    plt.figure()
-    plt.plot(delta_an_x, list_of_time_step, color="purple")
-    plt.title(f"{problem.method.__name__}, ang_mom_x", fontsize=20, color="black")
-    plt.xlabel('time step, years')
-    plt.ylabel('delta ang_mom_x')
-    plt.savefig(Path(Path.cwd(), "data", "stability",
-                     f"{problem.method.__name__}", f"delta_an_x_{problem.method.__name__}.jpg"))
-
-    plt.figure()
-    plt.plot(delta_an_y, list_of_time_step, color="purple")
-    plt.title(f"{problem.method.__name__}, ang_mom_y", fontsize=20, color="black")
-    plt.xlabel('time step, years')
-    plt.ylabel('delta ang_mom_y')
-    plt.savefig(Path(Path.cwd(), "data", "stability",
-                     f"{problem.method.__name__}", f"delta_an_y_{problem.method.__name__}.jpg"))
-
-    plt.figure()
-    plt.plot(delta_an_z, list_of_time_step, color="purple")
-    plt.title(f"{problem.method.__name__}, ang_mom_z", fontsize=20, color="black")
-    plt.xlabel('time step, years')
-    plt.ylabel('delta ang_mom_z')
-    plt.savefig(Path(Path.cwd(), "data", "stability",
-                     f"{problem.method.__name__}", f"delta_an_z_{problem.method.__name__}.jpg"))
-
-def plot_bodies(bodies, problem):
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    for i in range(len(bodies)):
-        df_i = pd.read_csv(Path(Path.cwd(), "data", "data out", "objects", f"{bodies[i].name}.txt"), header=0, sep="\t")
-        x_i = df_i['X, a.u.'].tolist()
-        y_i = df_i['Y, a.u.'].tolist()
-        z_i = df_i['Z, a.u.'].tolist()
-        ax.plot(x_i, y_i, z_i, color=bodies[i].color, label=bodies[i].name)
-        # plt.plot(x_i, y_i, color=bodies[i].color, label=bodies[i].name)
-    plt.title(f"{problem.method.__name__} for {problem.time_end} year(s)", fontsize=20, color="purple")
-    plt.xlabel('X, а.е.')
-    plt.ylabel('Y, а.е.')
-    plt.legend(loc='best')
-    plt.grid(which='major')
-    plt.grid(which='minor', linestyle=':')
-    plt.gca().set_aspect("equal")
-    plt.tight_layout()
-    plt.show()
-def plot_elements(bodies, problem):
-    figure, axis = plt.subplots(1, 3)
-
-    elements = [[] for i in range(5)]
-    list_for_elements = [["major axis", "au"],
-                         ["eccentricity", ""],
-                         ["inclination", "degrees"],
-                         ["longitude of ascending node", "degrees"],
-                         ["argument of periapsis", "degrees"]]
-    for j in range(len(bodies)):
-        df_j = pd.read_csv(Path(Path.cwd(), "data", "data out", "elements", f"elements of {bodies[j].name}.txt"),
-                           header=0, sep="\t")
-        time = df_j['time, years'].tolist()
-        elements[0].append(df_j["a, a.u."].tolist())
-        elements[1].append(df_j["e"].tolist())
-        elements[2].append(df_j["i, degrees"].tolist())
-        elements[3].append(df_j["long_of_asc_node, degrees"].tolist())
-        elements[4].append(df_j["arg_of_periapsis, degrees"].tolist())
-
-    for i in range(len(bodies)):
-        axis[0].plot(time, elements[0][i], color=bodies[i].color, label=bodies[i].name)
-        axis[1].plot(time, elements[1][i], color=bodies[i].color, label=bodies[i].name)
-        axis[2].plot(time, elements[2][i], color=bodies[i].color, label=bodies[i].name)
-
-    axis[0].set_title("major axis")
-    axis[1].set_title("eccentricity")
-    axis[2].set_title("inclination")
-    plt.legend(loc='best')
-
-    figure, axis = plt.subplots(1, 2)
-
-    for i in range(len(bodies)):
-        axis[0].plot(time, elements[3][i], color=bodies[i].color, label=bodies[i].name)
-        axis[1].plot(time, elements[4][i], color=bodies[i].color, label=bodies[i].name)
-
-    axis[0].set_title("longitude of ascending node")
-    axis[1].set_title("argument of periapsis")
-    plt.legend(loc='best')
-
-    plt.show()
-def plot_energy(problem):
-    df_en = pd.read_csv(Path(Path.cwd(), "data", "data out", "energy.txt"), header=0, sep="\t")
-    time = df_en['time, years'].tolist()
-    energy = df_en['energy'].tolist()
-    plt.plot(time, energy, color='red')
-
-    plt.title(f"{problem.method.__name__} energy", fontsize=20, color="red")
-    plt.xlabel('time, years')
-    plt.ylabel('energy')
-    # plt.gca().set_aspect("equal")
-    plt.show()
-def plot_momentum(problem):
-    df_mom = pd.read_csv(Path(Path.cwd(), "data", "data out", "momentum.txt"), header=0, sep="\t")
-    time = df_mom['time, years'].tolist()
-    momentum_x = df_mom['momentum_x'].tolist()
-    momentum_y = df_mom['momentum_y'].tolist()
-    momentum_z = df_mom['momentum_z'].tolist()
-    momentum_mag = df_mom['momentum_mag'].tolist()
-
-    plt.plot(momentum_x, momentum_y, color='blue')
-    plt.title(f"{problem.method.__name__} vector of total momentum", fontsize=20, color="blue")
-    plt.xlabel('X, a.u.')
-    plt.ylabel('Y, a.u.')
-    plt.show()
-
-    plt.plot(time, momentum_mag, color='purple')
-    plt.title(f"{problem.method.__name__} magnitude of vector of total momentum", fontsize=20, color="purple")
-    plt.xlabel('time, years')
-    plt.ylabel('magnitude')
-    plt.show()
-def plot_angular_momentum(problem):
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    df_mom = pd.read_csv(Path(Path.cwd(), "data", "data out", "angular momentum.txt"), header=0, sep="\t")
-    time = df_mom['time, years'].tolist()
-    ang_mom_x = df_mom['angular_momentum_x'].tolist()
-    ang_mom_y = df_mom['angular_momentum_y'].tolist()
-    ang_mom_z = df_mom['angular_momentum_z'].tolist()
-    ang_mom_mag = df_mom['angular_momentum_mag'].tolist()
-
-    ax.plot(ang_mom_x, ang_mom_y, ang_mom_z, color='blue')
-    plt.title(f"{problem.method.__name__} vector of total momentum", fontsize=20, color="blue")
-    plt.xlabel('X')
-    plt.ylabel('Y')
-    plt.show()
-
-    plt.plot(time, ang_mom_mag, color='cyan')
-    plt.title(f"{problem.method.__name__} magnitude of vector of angular momentum", fontsize=20, color="black")
-    plt.xlabel('time, years')
-    plt.ylabel('magnitude')
-    plt.show()
-def plot_cm(problem):
-    fig, ax = plt.subplots()
-    df_en = pd.read_csv(Path(Path.cwd(), "data", "data out", "center_mass.txt"), header=0, sep="\t")
-    time = df_en['time, years'].tolist()
-    coord_cm_x = df_en['cm_x, a.u.'].tolist()
-    coord_cm_y = df_en['cm_y, a.u.'].tolist()
-    coord_cm_z = df_en['cm_z, a.u.'].tolist()
-    plt.plot(coord_cm_x, coord_cm_y, color='red')
-
-    plt.title(f"{problem.method.__name__} trajectory of center of mass ({problem.time_end} years)",
-              fontsize=20, color="green")
-    plt.xlabel('X, a.u.')
-    plt.ylabel('Y, a.u.')
-    plt.show()
-def plot_time_step(problem):
-    df_ts = pd.read_csv(Path(Path.cwd(), "data", "data out", "time_step.txt"), header=0, sep="\t")
-    time = df_ts['time, years'].tolist()
-    time_step = df_ts['time step, years'].tolist()
-    plt.plot(time, time_step, color='red')
-    plt.title(f"Magnitude of time step ({problem.method.__name__})", fontsize=20, color="green")
-    plt.xlabel('time, years')
-    plt.ylabel('time step, years')
-    plt.show()
-def plot_all(problem, bodies):
-    plt.figure()
-    for i in range(len(bodies)):
-        df_i = pd.read_csv(Path(Path.cwd(), "data", "objects", f"{bodies[i].name}.txt"), header=0, sep="\t")
-        x_i = df_i['X, a.u.'].tolist()
-        y_i = df_i['Y, a.u.'].tolist()
-        z_i = df_i['Z, a.u.'].tolist()
-        plt.plot(x_i, y_i, color=bodies[i].color, label=bodies[i].name)
-
-    plt.title(f"{problem.method.__name__} for {problem.time_end} year(s)", fontsize=20, color="purple")
-    plt.xlabel('X, а.е.')
-    plt.ylabel('Y, а.е.')
-    plt.legend(loc='best')
-    plt.grid(which='major')
-    plt.grid(which='minor', linestyle=':')
-    plt.gca().set_aspect("equal")
-    plt.tight_layout()
-
-    plt.figure()
-    df_en = pd.read_csv(Path(Path.cwd(), "data", "data out", "energy.txt"), header=0, sep="\t")
-    time = df_en['time, years'].tolist()
-    energy = df_en['energy'].tolist()
-    plt.plot(time, energy, color='red')
-
-    plt.title(f"{problem.method.__name__} energy", fontsize=20, color="red")
-    plt.xlabel('time, years')
-    plt.ylabel('energy')
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    df_mom = pd.read_csv(Path(Path.cwd(), "data", "data out", "momentum.txt"), header=0, sep="\t")
-    time = df_mom['time, years'].tolist()
-    momentum_x = df_mom['momentum_y'].tolist()
-    momentum_y = df_mom['momentum_y'].tolist()
-    momentum_z = df_mom['momentum_z'].tolist()
-    momentum_mag = df_mom['momentum_mag'].tolist()
-    plt.plot(momentum_x, momentum_y, momentum_z, color='blue')
-    plt.title(f"{problem.method.__name__} vector of total momentum", fontsize=20, color="blue")
-    plt.xlabel('X, a.u.')
-    plt.ylabel('Y, a.u.')
-
-    plt.figure()
-    plt.plot(time, momentum_mag, color='purple')
-    plt.title(f"{problem.method.__name__} magnitude of vector of total momentum", fontsize=20, color="purple")
-    plt.xlabel('time, years')
-    plt.ylabel('magnitude')
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    df_cm = pd.read_csv(Path(Path.cwd(), "data", "data out", "center_mass.txt"), header=0, sep="\t")
-    time = df_cm['time, years'].tolist()
-    coord_cm_x = df_cm['cm_x, a.u.'].tolist()
-    coord_cm_y = df_cm['cm_y, a.u.'].tolist()
-    coord_cm_z = df_cm['cm_z, a.u.'].tolist()
-    plt.plot(coord_cm_x, coord_cm_y, coord_cm_z, color='red')
-    plt.title(f"{problem.method.__name__} trajectory of center of mass ({problem.time_end} years)",
-              fontsize=20, color="green")
-    plt.xlabel('X, a.u.')
-    plt.ylabel('Y, a.u.')
-
-    df_ts = pd.read_csv(Path(Path.cwd(), "data", "data out", "time_step.txt"), header=0, sep="\t")
-    time = df_ts['time, years'].tolist()
-    time_step = df_ts['time step, years'].tolist()
-    plt.figure()
-    plt.plot(time, time_step, color='red')
-    plt.title(f"Magnitude of time step ({problem.method.__name__})", fontsize=20, color="green")
-    plt.xlabel('time, years')
-    plt.ylabel('time step, years')
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    df_mom = pd.read_csv(Path(Path.cwd(), "data", "data out", "angular momentum.txt"), header=0, sep="\t")
-    time = df_mom['time, years'].tolist()
-    ang_mom_x = df_mom['angular_momentum_x'].tolist()
-    ang_mom_y = df_mom['angular_momentum_y'].tolist()
-    ang_mom_z = df_mom['angular_momentum_z'].tolist()
-    ang_mom_mag = df_mom['angular_momentum_mag'].tolist()
-
-    ax.plot(ang_mom_x, ang_mom_y, ang_mom_z, color='blue')
-    plt.title(f"{problem.method.__name__} vector of angular momentum", fontsize=20, color="blue")
-    plt.xlabel('X')
-    plt.ylabel('Y')
-
-    plt.figure()
-    plt.plot(time, ang_mom_mag, color='cyan')
-    plt.title(f"{problem.method.__name__} magnitude of vector of angular momentum", fontsize=20, color="black")
-    plt.xlabel('time, years')
-    plt.ylabel('magnitude')
-    plt.show()
+    df = pd.concat([list_of_time_step, delta_en, delta_an_x, delta_an_y, delta_an_z], axis=1)
+    df.to_csv(Path(Path.cwd(), "data", "stability", "stability_data",
+                   f"{method_name}", "general.txt"), sep="\t")
